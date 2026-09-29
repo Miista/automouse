@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>mam-spender</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app" v-scope="App()" @vue:mounted="mounted">
+
+  <header class="topbar">
+    <div class="brand">mam-spender</div>
+    <button v-if="loggedIn" class="link-btn" @click="logout">Log out</button>
+  </header>
+
+  <main>
+    <!-- First-launch admin setup -->
+    <section v-if="view === 'setup'" class="auth-card">
+      <h1>Create admin account</h1>
+      <p class="dim">This is a one-time setup. Choose credentials to protect mam-spender's dashboard and API.</p>
+      <form @submit.prevent="submitSetup">
+        <label>Username<input type="text" v-model="setupForm.username" required autocomplete="username"></label>
+        <label>Password<input v-model="setupForm.password" type="password" minlength="8" required autocomplete="new-password"></label>
+        <p class="error-box" v-if="setupError">{{ setupError }}</p>
+        <button type="submit">Create admin account</button>
+      </form>
+    </section>
+
+    <!-- Login -->
+    <section v-if="view === 'login'" class="auth-card">
+      <h1>Sign in</h1>
+      <form @submit.prevent="submitLogin">
+        <label>Username<input type="text" v-model="loginForm.username" required autocomplete="username"></label>
+        <label>Password<input v-model="loginForm.password" type="password" required autocomplete="current-password"></label>
+        <p class="error-box" v-if="loginError">{{ loginError }}</p>
+        <button type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <!-- Dashboard -->
+    <section v-if="view === 'app'">
+      <nav class="tabs">
+        <button :class="{active: tab === 'dashboard'}" @click="tab = 'dashboard'">Dashboard</button>
+        <button :class="{active: tab === 'settings'}" @click="tab = 'settings'">Settings</button>
+      </nav>
+
+      <div v-if="tab === 'dashboard'">
+        <div class="status-card" :class="state.paused ? 'status-paused' : (state.scheduler_enabled ? 'status-running' : 'status-idle')">
+          <div class="status-main">
+            <span class="status-badge">{{ statusLabel }}</span>
+            <span class="dim" v-if="state.scheduler_enabled && !state.paused && state.next_run_time">
+              Next run: {{ formatTime(state.next_run_time) }}
+            </span>
+          </div>
+          <div class="status-actions">
+            <button v-if="!state.scheduler_enabled || state.paused" class="btn-primary" @click="startSchedule">Activate</button>
+            <button v-else class="btn-danger" @click="pauseSchedule">Deactivate</button>
+            <button class="btn-secondary" :disabled="state.running" @click="runNow">{{ state.running ? 'Running…' : 'Run now' }}</button>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat-tile">
+            <div class="stat-value">{{ state.have_points ? state.current_points.toLocaleString() : '—' }}</div>
+            <div class="stat-label">Current points</div>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat-tile"><div class="stat-value">{{ state.totals.cumulative_upload_gb }}</div><div class="stat-label">GiB upload bought</div></div>
+          <div class="stat-tile"><div class="stat-value">{{ state.totals.cumulative_freeleech_wedges }}</div><div class="stat-label">FL wedges bought</div></div>
+          <div class="stat-tile"><div class="stat-value">{{ state.totals.cumulative_vip_purchases }}</div><div class="stat-label">VIP renewals</div></div>
+          <div class="stat-tile"><div class="stat-value">{{ state.totals.cumulative_points_spent.toLocaleString() }}</div><div class="stat-label">Points spent</div></div>
+        </div>
+
+        <h2>Run history</h2>
+        <table class="data-table" v-if="state.history.length">
+          <thead><tr><th>Started</th><th>Result</th><th>Points spent</th><th>Points left</th><th>Upload GiB</th><th>Wedges</th><th>VIP</th></tr></thead>
+          <tbody>
+            <tr v-for="h in state.history" :key="h.started_at">
+              <td class="mono dim">{{ formatTime(h.started_at) }}</td>
+              <td>{{ h.result }}</td>
+              <td>{{ (h.points_spent || 0).toLocaleString() }}</td>
+              <td>{{ (h.points_after || 0).toLocaleString() }}</td>
+              <td>{{ h.upload_gb || 0 }}</td>
+              <td>{{ h.freeleech_wedges || 0 }}</td>
+              <td>{{ h.vip_purchased ? 'Yes' : 'No' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="dim">No runs yet.</p>
+      </div>
+
+      <div v-if="tab === 'settings'">
+        <p class="dim">
+          Fields locked with <span class="lock-icon">&#128274;</span> are pinned by an environment variable and
+          cannot be changed here. This is the recommended way to set your MAM Session_ID — it never touches disk.
+        </p>
+
+        <form @submit.prevent="saveSettings" class="settings-form">
+          <fieldset>
+            <legend>MAM session</legend>
+            <div class="field-row" v-if="settings.env_managed.mam_id">
+              <label>Mam Session_ID</label>
+              <div class="locked-field">
+                <span class="lock-icon">&#128274;</span>
+                <span class="mono">{{ settings.values.mam_id || '(not set)' }}</span>
+                <span class="locked-caption">Managed by <code>{{ settings.env_managed.mam_id }}</code></span>
+              </div>
+            </div>
+            <div class="field-row" v-else>
+              <label>Mam Session_ID</label>
+              <input type="password" v-model="mamIdInput" :placeholder="settings.values.mam_id || 'Paste your mam_id cookie value'">
+              <p class="hint">Prefer setting <code>MAMSPENDER_SETTING_MAM_ID</code> as an environment variable instead — it avoids storing the cookie on disk at all.</p>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Purchases</legend>
+
+            <p class="step-label">Step 1 — VIP renewal (runs first, every time)</p>
+            <div class="field-row">
+              <label v-if="settings.env_managed.buy_vip">
+                Renew VIP automatically
+                <span class="locked-field inline">
+                  <span class="lock-icon">&#128274;</span>
+                  {{ settings.values.buy_vip ? 'On' : 'Off' }}
+                  <span class="locked-caption">Managed by <code>{{ settings.env_managed.buy_vip }}</code></span>
+                </span>
+              </label>
+              <label v-else class="checkbox-label">
+                <input type="checkbox" v-model="settings.values.buy_vip">
+                Renew VIP automatically
+              </label>
+              <p class="hint">Tops VIP back up to the 90-day cap once it drops to 83 days or less — always a full renewal, never a wasted partial one.</p>
+            </div>
+
+            <p class="step-label">Step 2 — how to spend remaining points</p>
+            <div class="field-row">
+              <div class="locked-field" v-if="settings.env_managed.upload_strategy">
+                <span class="lock-icon">&#128274;</span>
+                <span class="mono">{{ settings.values.upload_strategy }}</span>
+                <span class="locked-caption">Managed by <code>{{ settings.env_managed.upload_strategy }}</code></span>
+              </div>
+            </div>
+            <div class="field-row" v-for="opt in [
+              {value:'none', label:'Don\'t spend', hint:'No upload credit or freeleech wedges are purchased.'},
+              {value:'upload_only', label:'Buy upload credit', hint:''},
+              {value:'wedge_only', label:'Buy freeleech wedges only', hint:'Only buys freeleech wedges (50,000 points each).'},
+              {value:'alternate', label:'Alternate: wedge, then upload credit, then wedge...', hint:'Alternate between buying freeleech wedges and upload credit.'},
+            ]" :key="opt.value" v-show="!settings.env_managed.upload_strategy">
+              <label class="radio-label">
+                <input type="radio" name="upload_strategy" :value="opt.value" v-model="settings.values.upload_strategy">
+                {{ opt.label }}
+              </label>
+              <p class="hint" v-if="opt.hint">{{ opt.hint }}</p>
+            </div>
+
+            <div class="nested-field">
+              <label>Max GiB to buy per run</label>
+              <div v-if="settings.env_managed.max_upload_gb_per_run" class="locked-field">
+                <span class="lock-icon">&#128274;</span>
+                <span class="mono">{{ settings.values.max_upload_gb_per_run }}</span>
+                <span class="locked-caption">Managed by <code>{{ settings.env_managed.max_upload_gb_per_run }}</code></span>
+              </div>
+              <input v-else type="number" v-model.number="settings.values.max_upload_gb_per_run" :min="50"
+                     :disabled="settings.values.upload_strategy !== 'upload_only' && settings.values.upload_strategy !== 'alternate'">
+              <p class="hint">Buys upload credit at 500 points per GiB. Caps how much is bought in a single run. MAM requires at least 50 GiB per automated purchase, so this can't go below 50.</p>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Run behavior</legend>
+            <div class="field-row" v-for="f in [
+              {key:'points_buffer', label:'Points buffer', min:0, max:25000, hint:'Points always kept in reserve — purchases only spend the balance above this amount.'},
+              {key:'next_run_delay_minutes', label:'Minutes between runs', min:2, max:null, hint:'How often the scheduler checks in and runs the automation while started.'},
+            ]" :key="f.key">
+              <label>{{ f.label }}</label>
+              <div v-if="settings.env_managed[f.key]" class="locked-field">
+                <span class="lock-icon">&#128274;</span>
+                <span class="mono">{{ settings.values[f.key] }}</span>
+                <span class="locked-caption">Managed by <code>{{ settings.env_managed[f.key] }}</code></span>
+              </div>
+              <input v-else type="number" v-model.number="settings.values[f.key]" :min="f.min" :max="f.max || undefined">
+              <p class="hint">{{ f.hint }}</p>
+            </div>
+          </fieldset>
+
+          <p class="error-box" v-if="settingsError">{{ settingsError }}</p>
+          <p class="success-box" v-if="settingsSaved">Settings saved.</p>
+          <button type="submit">Save settings</button>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="vendor/petite-vue.iife.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
