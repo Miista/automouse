@@ -80,6 +80,19 @@ func (c *Client) get(path string) (map[string]any, error) {
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, fmt.Errorf("mam returned non-JSON response")
 	}
+	// bonusBuy.php (and possibly other endpoints) report a *logical*
+	// failure with HTTP 200 and a body like {"success":false,"error":"..."}
+	// — confirmed directly against the live API (e.g. rejecting a below-
+	// floor upload amount). A non-4xx/5xx status alone does not mean the
+	// request did what it asked; only treat this as an error when
+	// "success" is explicitly present and false, since plain data-fetching
+	// endpoints don't include this field at all.
+	if success, ok := data["success"].(bool); ok && !success {
+		if errMsg, ok := data["error"].(string); ok && errMsg != "" {
+			return data, fmt.Errorf("mam rejected request: %s", errMsg)
+		}
+		return data, fmt.Errorf("mam rejected request")
+	}
 	return data, nil
 }
 

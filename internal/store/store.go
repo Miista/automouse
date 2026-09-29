@@ -35,8 +35,6 @@ type Settings struct {
 	MaxUploadGBPerRun     int    `json:"max_upload_gb_per_run"`
 	NextRunDelayMinutes   int    `json:"next_run_delay_minutes"`
 	MamID                 string `json:"mam_id"`
-	ServerHost            string `json:"server_host"`
-	ServerPort            int    `json:"server_port"`
 }
 
 // DefaultSettings mirrors the Python edition's dataclass defaults.
@@ -48,8 +46,6 @@ func DefaultSettings() Settings {
 		PointsBuffer:          10000,
 		MaxUploadGBPerRun:     150,
 		NextRunDelayMinutes:   15,
-		ServerHost:            "127.0.0.1",
-		ServerPort:            8765,
 	}
 }
 
@@ -93,15 +89,14 @@ type Auth struct {
 
 // State is the full persisted document.
 type State struct {
-	Admin         *Admin         `json:"admin,omitempty"`
-	Auth          Auth           `json:"auth"`
-	Settings      Settings       `json:"settings"`
-	Totals        Totals         `json:"totals"`
-	SchedulerOn   bool           `json:"scheduler_enabled"`
-	Paused        bool           `json:"paused"`
-	NextRunTime   *time.Time     `json:"next_run_time,omitempty"`
-	History       []HistoryEntry `json:"history"`
-	LastSeedBonus *int           `json:"last_seed_bonus,omitempty"`
+	Admin       *Admin         `json:"admin,omitempty"`
+	Auth        Auth           `json:"auth"`
+	Settings    Settings       `json:"settings"`
+	Totals      Totals         `json:"totals"`
+	SchedulerOn bool           `json:"scheduler_enabled"`
+	Paused      bool           `json:"paused"`
+	NextRunTime *time.Time     `json:"next_run_time,omitempty"`
+	History     []HistoryEntry `json:"history"`
 }
 
 const maxHistory = 300

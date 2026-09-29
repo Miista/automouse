@@ -128,6 +128,10 @@ function App() {
       this.settingsError = '';
       this.settingsSaved = false;
       const payload = { ...this.settings.values };
+      // alternate_next_purchase is internal scheduler rotation state, not a
+      // user-editable setting — never send it back, so a save can never
+      // clobber it (the API also ignores it if sent, but don't rely on that).
+      delete payload.alternate_next_purchase;
       if (this.mamIdInput) {
         payload.mam_id = this.mamIdInput;
       } else {

@@ -32,8 +32,6 @@ var definitions = []Field{
 	{Key: "max_upload_gb_per_run", EnvOverridable: true},
 	{Key: "next_run_delay_minutes", EnvOverridable: true},
 	{Key: "mam_id", EnvOverridable: true},
-	{Key: "server_host", EnvOverridable: true},
-	{Key: "server_port", EnvOverridable: true},
 }
 
 func init() {
@@ -91,8 +89,6 @@ func Resolve(persisted store.Settings) Resolved {
 	apply("max_upload_gb_per_run", func(v string) { r.Settings.MaxUploadGBPerRun = parseInt(v, r.Settings.MaxUploadGBPerRun) })
 	apply("next_run_delay_minutes", func(v string) { r.Settings.NextRunDelayMinutes = parseInt(v, r.Settings.NextRunDelayMinutes) })
 	apply("mam_id", func(v string) { r.Settings.MamID = v })
-	apply("server_host", func(v string) { r.Settings.ServerHost = v })
-	apply("server_port", func(v string) { r.Settings.ServerPort = parseInt(v, r.Settings.ServerPort) })
 
 	return r
 }

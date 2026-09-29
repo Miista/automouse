@@ -293,8 +293,6 @@ func applySettingsPatch(st *store.Settings, incoming map[string]any) {
 	setInt("max_upload_gb_per_run", &st.MaxUploadGBPerRun, mamclient.MinUploadGB, 0)
 	setInt("next_run_delay_minutes", &st.NextRunDelayMinutes, 2, 0)
 	setString("mam_id", &st.MamID)
-	setString("server_host", &st.ServerHost)
-	setInt("server_port", &st.ServerPort, 1024, 65535)
 }
 
 // publicSettings renders resolved settings for API responses: env-managed
@@ -309,8 +307,6 @@ func publicSettings(resolved settings.Resolved) map[string]any {
 		"max_upload_gb_per_run":   s.MaxUploadGBPerRun,
 		"next_run_delay_minutes":  s.NextRunDelayMinutes,
 		"mam_id":                  settingsMaskMamID(resolved),
-		"server_host":             s.ServerHost,
-		"server_port":             s.ServerPort,
 	}
 	envManaged := map[string]string{}
 	for k, v := range resolved.Managed {

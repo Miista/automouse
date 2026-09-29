@@ -266,17 +266,38 @@ func (s *Scheduler) runOnce(flOnlyOverride bool) {
 		// the live API. This floor is MAM's, not a design choice of ours,
 		// so it's enforced here regardless of the configured cap.
 		if gb >= mamclient.MinUploadGB {
-			cost := gb * mamclient.PointsPerGB
+			before := points
 			if err := client.BuyUploadCredit(gb); err != nil {
 				s.log.Warn().Err(err).Msg("upload credit purchase failed")
-			} else {
-				points -= cost
+			} else if newPoints, err := client.SeedBonus(uid); err != nil {
+				// The purchase request itself succeeded, but we can't
+				// confirm the outcome — MAM is the source of truth for the
+				// balance, not our own arithmetic, so an unconfirmed
+				// purchase must not be recorded as GB bought or points
+				// spent. Flag it loudly: this is the one scenario where
+				// money may have moved with no local record of it.
+				s.log.Error().Err(err).Msg("upload credit purchase sent, but balance re-check failed afterward — unable to confirm outcome, points may have been spent without being recorded")
+			} else if newPoints < before {
+				points = newPoints
 				uploadGB = gb
 				if cfg.UploadStrategy == store.StrategyAlternate {
 					s.setAlternateTarget("freeleech_wedge")
 				}
+			} else {
+				s.log.Warn().Msg("upload credit purchase request succeeded but balance did not decrease — treating as failed")
 			}
 		}
+	}
+
+	// Always finish with a fresh balance check rather than trusting our own
+	// running arithmetic through the purchases above — MAM's own reported
+	// balance is the only honest source of truth for what actually
+	// happened this run, regardless of how each individual purchase step
+	// verified (or failed to verify) itself.
+	if finalPoints, err := client.SeedBonus(uid); err != nil {
+		s.log.Error().Err(err).Msg("final balance re-check failed — recorded totals for this run reflect our own bookkeeping, not a confirmed MAM balance")
+	} else {
+		points = finalPoints
 	}
 
 	pointsSpent := initialPoints - points
@@ -288,6 +309,7 @@ func (s *Scheduler) runOnce(flOnlyOverride bool) {
 	entry.UploadGB = uploadGB
 	entry.FreeleechWedges = wedgesPurchased
 	entry.VIPPurchased = vipPurchased
+	s.recordPoints(points)
 
 	s.updateTotals(uploadGB, pointsSpent, wedgesPurchased, vipPurchased)
 	s.appendHistory(entry)

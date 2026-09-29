@@ -107,20 +107,30 @@ func (m *Manager) HasAdmin() bool {
 
 // CreateAdmin sets the first (and only) admin account. Fails if one already
 // exists — use ChangePassword to update credentials afterward.
+//
+// The existence check and the write happen inside one store.Update call, so
+// two concurrent first-launch setup requests can't both pass the check and
+// race to overwrite each other's admin account.
 func (m *Manager) CreateAdmin(username, password string) error {
 	if len(password) < 8 {
 		return ErrWeakPassword
-	}
-	if m.HasAdmin() {
-		return ErrAdminExists
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	return m.store.Update(func(s *store.State) {
+	alreadyExists := false
+	updateErr := m.store.Update(func(s *store.State) {
+		if s.Admin != nil {
+			alreadyExists = true
+			return
+		}
 		s.Admin = &store.Admin{Username: username, PasswordHash: string(hash)}
 	})
+	if alreadyExists {
+		return ErrAdminExists
+	}
+	return updateErr
 }
 
 // Authenticate verifies a username/password pair against the stored admin
