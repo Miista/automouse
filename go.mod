@@ -1,4 +1,4 @@
-module github.com/miista/mam-spender
+module github.com/miista/automouse
 
 go 1.27.0
 

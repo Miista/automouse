@@ -17,11 +17,11 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/miista/mam-spender/internal/store"
+	"github.com/miista/automouse/internal/store"
 )
 
 const (
-	sessionCookieName = "mamspender_session"
+	sessionCookieName = "automouse_session"
 	sessionTTL        = 30 * 24 * time.Hour
 )
 
@@ -95,7 +95,7 @@ func (m *Manager) persistSessionsLocked() {
 	})
 }
 
-// Disabled reports whether auth is disabled via MAMSPENDER_AUTH_DISABLED.
+// Disabled reports whether auth is disabled via AUTOMOUSE_AUTH_DISABLED.
 // Callers should check this before enforcing RequireSession.
 func (m *Manager) HasAdmin() bool {
 	has := false

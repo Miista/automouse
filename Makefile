@@ -10,10 +10,10 @@ all: build
 ARCH ?= $(shell go env GOARCH)
 
 build:
-	CGO_ENABLED=0 GOOS=linux GOARCH=$(ARCH) go build -trimpath -ldflags="-s -w" -o mam-spender .
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(ARCH) go build -trimpath -ldflags="-s -w" -o automouse .
 
 docker: build
-	docker build -t mam-spender:local .
+	docker build -t automouse:local .
 
 clean:
-	rm -f mam-spender
+	rm -f automouse

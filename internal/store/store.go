@@ -1,4 +1,4 @@
-// Package store persists mam-spender's full application state to a single
+// Package store persists automouse's full application state to a single
 // JSON file under a data directory, mirroring the original Python edition's
 // /app/data volume mount. All writes go through Save, which rewrites the
 // whole file with 0600 permissions since it may contain a secret (the MAM

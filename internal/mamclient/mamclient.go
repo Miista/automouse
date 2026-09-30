@@ -14,7 +14,7 @@ import (
 
 const (
 	baseURL     = "https://www.myanonamouse.net"
-	userAgent   = "mam-spender-go"
+	userAgent   = "automouse-go"
 	PointsPerGB = 500
 	// MinUploadGB is MAM's own minimum for automated upload-credit
 	// purchases, confirmed directly against the live API: amounts below

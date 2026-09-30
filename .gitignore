@@ -1,5 +1,5 @@
 # Compiled binary (built via `make build`, not checked in)
-/mam-spender
+/automouse
 
 # Runtime data: persisted settings, MAM session cookie, admin credentials,
 # session tokens. Never commit this.

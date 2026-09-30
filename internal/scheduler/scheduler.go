@@ -10,9 +10,9 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/miista/mam-spender/internal/mamclient"
-	"github.com/miista/mam-spender/internal/settings"
-	"github.com/miista/mam-spender/internal/store"
+	"github.com/miista/automouse/internal/mamclient"
+	"github.com/miista/automouse/internal/settings"
+	"github.com/miista/automouse/internal/store"
 )
 
 const pollInterval = 5 * time.Second

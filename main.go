@@ -1,4 +1,4 @@
-// Command mam-spender automates spending MyAnonamouse bonus points (VIP
+// Command automouse automates spending MyAnonamouse bonus points (VIP
 // renewal, upload credit, freeleech wedges) on a schedule, behind a
 // first-launch admin login and env-var-overridable settings.
 package main
@@ -12,24 +12,24 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/miista/mam-spender/internal/api"
-	"github.com/miista/mam-spender/internal/auth"
-	"github.com/miista/mam-spender/internal/scheduler"
-	"github.com/miista/mam-spender/internal/store"
+	"github.com/miista/automouse/internal/api"
+	"github.com/miista/automouse/internal/auth"
+	"github.com/miista/automouse/internal/scheduler"
+	"github.com/miista/automouse/internal/store"
 )
 
 func main() {
 	log := newLogger()
 
-	dataDir := os.Getenv("MAMSPENDER_DATA_DIR")
+	dataDir := os.Getenv("AUTOMOUSE_DATA_DIR")
 	if dataDir == "" {
 		dataDir = "/app/data"
 	}
-	addr := os.Getenv("MAMSPENDER_ADDR")
+	addr := os.Getenv("AUTOMOUSE_ADDR")
 	if addr == "" {
 		addr = "127.0.0.1:8765"
 	}
-	staticDir := os.Getenv("MAMSPENDER_STATIC_DIR")
+	staticDir := os.Getenv("AUTOMOUSE_STATIC_DIR")
 	if staticDir == "" {
 		staticDir = "web/static"
 	}
@@ -53,7 +53,7 @@ func main() {
 	server.Routes(mux)
 	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 
-	log.Info().Str("addr", addr).Str("data_dir", dataDir).Str("static_dir", staticDir).Msg("starting mam-spender")
+	log.Info().Str("addr", addr).Str("data_dir", dataDir).Str("static_dir", staticDir).Msg("starting automouse")
 
 	httpServer := &http.Server{
 		Addr:              addr,

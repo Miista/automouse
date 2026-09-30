@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>mam-spender</title>
+<title>AutoMouse</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -11,7 +11,7 @@
 <div id="app" v-scope="App()" @vue:mounted="mounted">
 
   <header class="topbar">
-    <div class="brand">mam-spender</div>
+    <div class="brand">AutoMouse</div>
     <button v-if="loggedIn" class="link-btn" @click="logout">Log out</button>
   </header>
 
@@ -19,7 +19,7 @@
     <!-- First-launch admin setup -->
     <section v-if="view === 'setup'" class="auth-card">
       <h1>Create admin account</h1>
-      <p class="dim">This is a one-time setup. Choose credentials to protect mam-spender's dashboard and API.</p>
+      <p class="dim">This is a one-time setup. Choose credentials to protect AutoMouse's dashboard and API.</p>
       <form @submit.prevent="submitSetup">
         <label>Username<input type="text" v-model="setupForm.username" required autocomplete="username"></label>
         <label>Password<input v-model="setupForm.password" type="password" minlength="8" required autocomplete="new-password"></label>

@@ -1,4 +1,4 @@
-// Package api implements the HTTP handlers for mam-spender: first-launch
+// Package api implements the HTTP handlers for automouse: first-launch
 // admin setup, login/logout, settings (with env-override reporting), and
 // scheduler control.
 package api
@@ -11,11 +11,11 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/miista/mam-spender/internal/auth"
-	"github.com/miista/mam-spender/internal/mamclient"
-	"github.com/miista/mam-spender/internal/scheduler"
-	"github.com/miista/mam-spender/internal/settings"
-	"github.com/miista/mam-spender/internal/store"
+	"github.com/miista/automouse/internal/auth"
+	"github.com/miista/automouse/internal/mamclient"
+	"github.com/miista/automouse/internal/scheduler"
+	"github.com/miista/automouse/internal/settings"
+	"github.com/miista/automouse/internal/store"
 )
 
 // Server wires the store, auth manager, and scheduler into HTTP handlers.

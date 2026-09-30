@@ -1,5 +1,5 @@
 // Package settings implements the env-var override convention: any setting
-// may be pinned via an MAMSPENDER_SETTING_<KEY> environment variable, which
+// may be pinned via an AUTOMOUSE_SETTING_<KEY> environment variable, which
 // then takes precedence over the persisted value and is reported to the UI
 // as "env managed" so it can be rendered read-only.
 //
@@ -11,10 +11,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/miista/mam-spender/internal/store"
+	"github.com/miista/automouse/internal/store"
 )
 
-const envPrefix = "MAMSPENDER_SETTING_"
+const envPrefix = "AUTOMOUSE_SETTING_"
 
 // Field describes one overridable setting.
 type Field struct {
@@ -116,9 +116,9 @@ func parseInt(v string, fallback int) int {
 	return n
 }
 
-// AuthDisabled reports whether MAMSPENDER_AUTH_DISABLED is set truthily.
+// AuthDisabled reports whether AUTOMOUSE_AUTH_DISABLED is set truthily.
 func AuthDisabled() bool {
-	v, ok := os.LookupEnv("MAMSPENDER_AUTH_DISABLED")
+	v, ok := os.LookupEnv("AUTOMOUSE_AUTH_DISABLED")
 	if !ok {
 		return false
 	}

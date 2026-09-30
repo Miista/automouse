@@ -5,8 +5,8 @@ RUN apk add --no-cache ca-certificates
 
 FROM scratch
 COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY mam-spender /mam-spender
+COPY automouse /automouse
 COPY web/static /web/static
 WORKDIR /
 EXPOSE 8765
-ENTRYPOINT ["/mam-spender"]
+ENTRYPOINT ["/automouse"]
