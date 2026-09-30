@@ -158,6 +158,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Settings form */
 .settings-form fieldset {
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px 18px;
