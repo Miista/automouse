@@ -92,8 +92,9 @@ func (s *Server) csrfGuard(next http.HandlerFunc) http.HandlerFunc {
 // returns no sensitive data.
 //
 // This deliberately does NOT attempt to detect a stale/orphaned network
-// namespace (e.g. the tun0-disappears-after-gluetun-recreate failure mode
-// some VPN-routed deployments hit). That check has to run from outside this
+// namespace (e.g. a VPN interface disappearing after the VPN container
+// sharing this one's network namespace gets recreated). That check has to
+// run from outside this
 // process — a `docker exec` healthcheck that inspects the container's
 // current namespace from Docker's perspective — because a check done by
 // this process only ever sees the namespace it's currently in; it can't

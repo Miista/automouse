@@ -10,11 +10,11 @@ services:
     # automouse:8765.
     #
     # If this container instead runs with network_mode: "service:<vpn>"
-    # (e.g. sharing a gluetun container's network namespace so its MAM
-    # traffic egresses through a specific VPN/seedbox IP), Docker does not
-    # allow a `ports:` block here at all — the mapping must live on that
-    # VPN container's own service definition instead, and this block should
-    # be removed.
+    # (sharing a VPN container's network namespace so its MAM traffic
+    # egresses through a specific VPN/seedbox IP), Docker does not allow a
+    # `ports:` block here at all — the mapping must live on that VPN
+    # container's own service definition instead, and this block should be
+    # removed.
     ports:
       - "8765:8765"
     volumes:
