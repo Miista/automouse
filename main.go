@@ -27,10 +27,6 @@ func main() {
 	}
 	addr := os.Getenv("AUTOMOUSE_ADDR")
 	if addr == "" {
-		// A bare ":8765" (no host prefix) binds all interfaces, matching
-		// tagbrr/reaparr's convention elsewhere in this stack — makes the
-		// container reachable out of the box via a plain `ports:` mapping,
-		// with no AUTOMOUSE_ADDR override needed just to get there.
 		addr = ":8765"
 	}
 	staticDir := os.Getenv("AUTOMOUSE_STATIC_DIR")
