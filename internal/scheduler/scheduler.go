@@ -17,6 +17,12 @@ import (
 
 const pollInterval = 5 * time.Second
 
+// pointsRefreshInterval controls a separate, independent ticker that keeps
+// the dashboard's points balance current even while the scheduler itself
+// is disabled or paused — a user watching the balance shouldn't see a
+// stale number just because automated spending is turned off.
+const pointsRefreshInterval = 15 * time.Minute
+
 // Scheduler owns the background run loop.
 type Scheduler struct {
 	store *store.Store
@@ -40,7 +46,19 @@ func New(st *store.Store, log zerolog.Logger) *Scheduler {
 // Start begins the background polling loop. Call once at startup.
 func (s *Scheduler) Start() {
 	go s.loop()
+	go s.pointsRefreshLoop()
 	s.RefreshPoints()
+}
+
+// pointsRefreshLoop keeps the dashboard's points balance current on a
+// fixed interval, regardless of whether the scheduler is enabled or
+// paused — unlike the main loop() ticker, this never checks SchedulerOn.
+func (s *Scheduler) pointsRefreshLoop() {
+	ticker := time.NewTicker(pointsRefreshInterval)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.RefreshPoints()
+	}
 }
 
 func (s *Scheduler) loop() {
