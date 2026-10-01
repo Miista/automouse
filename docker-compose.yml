@@ -3,10 +3,6 @@ services:
     image: automouse:local
     container_name: automouse
     build: .
-    # Dashboard is published on the host. It's protected by the built-in
-    # admin login (first-launch setup) — so this is safe to expose directly.
-    # If you'd rather front it with a reverse proxy instead, remove this
-    # ports block and reach it over the Docker network as automouse:8765.
     ports:
       - "8765:8765"
     volumes:
