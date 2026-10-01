@@ -1,8 +1,7 @@
 services:
   automouse:
-    image: automouse:local
+    image: ghcr.io/miista/automouse:latest
     container_name: automouse
-    build: .
     ports:
       - "8765:8765"
     volumes:
