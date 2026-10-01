@@ -97,7 +97,7 @@ Or without Docker:
 
 ```sh
 go build -o automouse .
-AUTOMOUSE_ADDR=127.0.0.1:8765 AUTOMOUSE_DATA_DIR=./data ./automouse
+AUTOMOUSE_DATA_DIR=./data ./automouse
 ```
 
 On first launch, open the dashboard and create an admin account before
@@ -105,7 +105,6 @@ configuring MAM settings.
 
 ## Other environment variables
 
-- `AUTOMOUSE_ADDR` — listen address (default `127.0.0.1:8765`).
 - `AUTOMOUSE_DATA_DIR` — where `config.json` is persisted (default `/app/data`).
 - `AUTOMOUSE_AUTH_DISABLED=true` — disables the admin login entirely. Only
   use this if you're binding strictly to loopback or otherwise fronting the

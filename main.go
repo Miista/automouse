@@ -25,10 +25,7 @@ func main() {
 	if dataDir == "" {
 		dataDir = "/app/data"
 	}
-	addr := os.Getenv("AUTOMOUSE_ADDR")
-	if addr == "" {
-		addr = ":8765"
-	}
+	const addr = ":8765"
 	staticDir := os.Getenv("AUTOMOUSE_STATIC_DIR")
 	if staticDir == "" {
 		staticDir = "web/static"

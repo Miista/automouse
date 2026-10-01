@@ -20,8 +20,6 @@ services:
     volumes:
       - ./data:/app/data
     environment:
-      AUTOMOUSE_ADDR: "0.0.0.0:8765"
-      AUTOMOUSE_DATA_DIR: "/app/data"
       # Recommended: pin the MAM session cookie via env var so it never
       # touches disk. The UI will show this field locked once set.
       # AUTOMOUSE_SETTING_MAM_ID: "your_mam_id_cookie_value"
