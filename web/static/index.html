@@ -48,14 +48,19 @@
 
       <div v-if="tab === 'dashboard'">
         <div class="status-card" :class="rateLimited ? 'status-paused' : (state.paused ? 'status-paused' : (state.scheduler_enabled ? 'status-running' : 'status-idle'))">
-          <div class="status-main">
-            <span class="status-badge">{{ statusLabel }}</span>
-            <span class="dim" v-if="rateLimited">
-              MyAnonamouse is rate limiting us — runs resume {{ formatTime(state.rate_limited_until) }}
-            </span>
-            <span class="dim" v-else-if="state.scheduler_enabled && !state.paused && state.next_run_time">
-              Next run: {{ formatTime(state.next_run_time) }}
-            </span>
+          <div class="status-info">
+            <div class="status-main">
+              <span class="status-badge">{{ statusLabel }}</span>
+              <span class="dim" v-if="rateLimited">
+                MyAnonamouse is rate limiting us — runs resume {{ formatTime(state.rate_limited_until) }}
+              </span>
+              <span class="dim" v-else-if="state.scheduler_enabled && !state.paused && state.next_run_time">
+                Next run: {{ formatTime(state.next_run_time) }}
+              </span>
+            </div>
+            <div class="status-reason" v-if="!rateLimited && state.next_run_reason">
+              {{ state.next_run_reason }}
+            </div>
           </div>
           <div class="status-actions">
             <button v-if="!state.scheduler_enabled || state.paused" class="btn-primary" @click="startSchedule">Activate</button>

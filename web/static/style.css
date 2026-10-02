@@ -125,7 +125,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   padding: 16px 20px;
   margin-bottom: 24px;
 }
+.status-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .status-main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* The scheduler's own explanation of why the next run is when it is —
+   secondary to the badge above it, but a full sentence rather than a chip. */
+.status-reason { color: var(--text-dim); font-size: 13px; line-height: 1.4; }
 .status-badge {
   font-weight: 700;
   padding: 4px 10px;

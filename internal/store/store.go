@@ -87,6 +87,26 @@ type Auth struct {
 	Sessions map[string]int64 `json:"sessions,omitempty"` // sessionID -> expiry (unix seconds)
 }
 
+// AccrualSample is one observation of the bonus-point balance, taken during
+// the nightly measurement window.
+type AccrualSample struct {
+	At     time.Time `json:"at"`
+	Points int       `json:"points"`
+}
+
+// Accrual holds the measured bonus-point accrual rate and the samples it was
+// derived from. MAM reports the rate on its bonus page, but that page is not
+// reachable with the JSON API credential, so it is measured instead: samples
+// are taken hourly between 01:00 and 04:00 local time, when the user is
+// unlikely to be spending points on the site and anything AutoMouse spends is
+// known. Points are consumed by purchases we do not make, so a window
+// containing a decrease is discarded rather than fitted.
+type Accrual struct {
+	PointsPerHour float64         `json:"points_per_hour,omitempty"`
+	MeasuredAt    *time.Time      `json:"measured_at,omitempty"`
+	Samples       []AccrualSample `json:"samples,omitempty"`
+}
+
 // State is the full persisted document.
 type State struct {
 	Admin       *Admin   `json:"admin,omitempty"`
@@ -97,10 +117,17 @@ type State struct {
 	// RateLimitedUntil is set when MAM rate-limits us. While it is in the
 	// future no run fires, and it is persisted so a restart cannot be used
 	// (accidentally or otherwise) to bypass the backoff.
-	RateLimitedUntil *time.Time     `json:"rate_limited_until,omitempty"`
-	Paused           bool           `json:"paused"`
-	NextRunTime      *time.Time     `json:"next_run_time,omitempty"`
-	History          []HistoryEntry `json:"history"`
+	RateLimitedUntil *time.Time `json:"rate_limited_until,omitempty"`
+	Paused           bool       `json:"paused"`
+	NextRunTime      *time.Time `json:"next_run_time,omitempty"`
+	// NextRunReason explains why the next run is scheduled when it is —
+	// "Waiting for enough points to buy anything" rather than an unexplained
+	// gap. Empty means the ordinary configured cadence.
+	NextRunReason string `json:"next_run_reason,omitempty"`
+	// Accrual is the measured points-per-hour rate used to skip runs that
+	// could not possibly afford anything.
+	Accrual Accrual        `json:"accrual"`
+	History []HistoryEntry `json:"history"`
 }
 
 const maxHistory = 300

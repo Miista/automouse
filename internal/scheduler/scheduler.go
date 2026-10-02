@@ -49,6 +49,7 @@ func New(st *store.Store, log zerolog.Logger) *Scheduler {
 func (s *Scheduler) Start() {
 	go s.loop()
 	go s.pointsRefreshLoop()
+	go s.accrualLoop()
 	s.RefreshPoints()
 }
 
@@ -63,6 +64,28 @@ func (s *Scheduler) pointsRefreshLoop() {
 			continue
 		}
 		s.RefreshPoints()
+	}
+}
+
+// accrualLoop takes one balance sample per hour while inside the nightly
+// measurement window, and nothing at all outside it. Checking every ten
+// minutes rather than scheduling precisely keeps it robust across restarts
+// and clock changes; the lastSample guard is what limits it to one sample
+// per hour.
+func (s *Scheduler) accrualLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	var lastSample time.Time
+	for range ticker.C {
+		now := time.Now()
+		if !inAccrualWindow(now) {
+			continue
+		}
+		if !lastSample.IsZero() && now.Sub(lastSample) < time.Hour {
+			continue
+		}
+		lastSample = now
+		s.sampleAccrual()
 	}
 }
 
@@ -91,6 +114,13 @@ func (s *Scheduler) loop() {
 		}
 		go s.runAndReschedule(false)
 	}
+}
+
+// asRateLimit is errors.As specialised to *mamclient.RateLimitError, so the
+// several call sites that only care "was this a rate limit?" read as one
+// line.
+func asRateLimit(err error, target **mamclient.RateLimitError) bool {
+	return errors.As(err, target)
 }
 
 // rateLimited reports whether a MAM rate-limit backoff is currently in
@@ -262,15 +292,35 @@ func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
 		if !st.SchedulerOn || st.Paused {
 			return
 		}
+		now := time.Now()
 		delay := time.Duration(st.Settings.NextRunDelayMinutes) * time.Minute
-		next := time.Now().Add(delay)
+		next := now.Add(delay)
+		reason := ""
+
+		// Skip ahead when the balance cannot reach the cheapest purchase by
+		// the next scheduled run: every run before then is a guaranteed
+		// no-op costing MAM requests to discover nothing. The balance is
+		// re-read on each run, so a projection made optimistic by site
+		// spending simply gets recomputed from the lower balance next time.
+		cfg := settings.Resolve(st.Settings).Settings
+		if threshold, ok := cheapestThreshold(cfg); ok {
+			if balance, have := s.PointsStatus(); have {
+				if eta, ok := projectNextUsefulRun(balance, threshold, st.Accrual.PointsPerHour, now); ok && eta.After(next) {
+					next = eta
+					reason = projectionReason(balance, threshold, st.Accrual.PointsPerHour)
+				}
+			}
+		}
+
 		// Never schedule back inside an active backoff window: runOnce may
 		// have just set one, and the normal delay is typically shorter than
 		// the retry-after.
 		if st.RateLimitedUntil != nil && next.Before(*st.RateLimitedUntil) {
 			next = *st.RateLimitedUntil
+			reason = "Backing off after MyAnonamouse rate limited us."
 		}
 		st.NextRunTime = &next
+		st.NextRunReason = reason
 	})
 }
 

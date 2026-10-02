@@ -178,6 +178,8 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 		"current_points":     currentPoints,
 		"have_points":        havePoints,
 		"rate_limited_until": rateLimitedUntil(st),
+		"next_run_reason":    st.NextRunReason,
+		"points_per_hour":    st.Accrual.PointsPerHour,
 	})
 }
 
