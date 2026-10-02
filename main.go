@@ -47,7 +47,11 @@ func main() {
 
 	mux := http.NewServeMux()
 	server.Routes(mux)
-	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
+	// No build step means no hashed filenames, so a browser must revalidate
+	// app.js/style.css/index.html on every load rather than caching them
+	// blindly — otherwise a deployed update can silently keep serving a
+	// stale dashboard until the user manually clears site data.
+	mux.Handle("/", noCache(http.FileServer(http.Dir(staticDir))))
 
 	log.Info().Str("addr", addr).Str("data_dir", dataDir).Msg("starting automouse")
 
@@ -59,6 +63,16 @@ func main() {
 	if err := httpServer.ListenAndServe(); err != nil {
 		log.Fatal().Err(err).Msg("server stopped")
 	}
+}
+
+// noCache forces revalidation on every static asset request instead of
+// letting a browser cache app.js/style.css/index.html indefinitely — see
+// the comment at its call site for why that matters here.
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // newLogger builds the process-wide zerolog.Logger using ConsoleWriter —
