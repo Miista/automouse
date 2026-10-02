@@ -69,6 +69,7 @@ type HistoryEntry struct {
 	UploadGB        int       `json:"upload_gb"`
 	FreeleechWedges int       `json:"freeleech_wedges"`
 	VIPPurchased    bool      `json:"vip_purchased"`
+	DryRun          bool      `json:"dry_run"`
 }
 
 // Admin holds the single admin account (Sonarr/Radarr first-launch pattern).

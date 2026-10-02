@@ -50,6 +50,7 @@ func (s *Server) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/start", s.guarded(s.csrfGuard(s.handleStart)))
 	mux.HandleFunc("/api/pause", s.guarded(s.csrfGuard(s.handlePause)))
 	mux.HandleFunc("/api/run", s.guarded(s.csrfGuard(s.handleRun)))
+	mux.HandleFunc("/api/dry-run", s.guarded(s.csrfGuard(s.handleDryRun)))
 }
 
 // guarded enforces that, once an admin account exists (and auth isn't
@@ -250,6 +251,15 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = readJSON(r, &req)
 	started, reason := s.scheduler.RunNow(req.FLOnlyOverride)
+	resp := map[string]any{"started": started}
+	if reason != "" {
+		resp["reason"] = reason
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleDryRun(w http.ResponseWriter, r *http.Request) {
+	started, reason := s.scheduler.RunDryNow()
 	resp := map[string]any{"started": started}
 	if reason != "" {
 		resp["reason"] = reason

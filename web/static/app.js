@@ -24,8 +24,15 @@ function App() {
     settingsError: '',
     settingsSaved: false,
     pollTimer: null,
+    runMenuOpen: false,
+    schedulerError: '',
 
     async mounted() {
+      // Closes the dry-run dropdown on any click outside the split-button.
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.split-button')) this.runMenuOpen = false;
+      });
+
       const setupRes = await fetch('/api/setup');
       const setupData = await setupRes.json();
       if (!setupData.admin_exists) {
@@ -116,11 +123,22 @@ function App() {
     },
 
     async runNow() {
-      await fetch('/api/run', {
+      this.schedulerError = '';
+      const res = await fetch('/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fl_only_override: false }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.reason) this.schedulerError = data.reason || data.error || 'Failed to start the run.';
+      await this.tryLoadState();
+    },
+
+    async dryRunNow() {
+      this.schedulerError = '';
+      const res = await fetch('/api/dry-run', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.reason) this.schedulerError = data.reason || data.error || 'Failed to start the dry run.';
       await this.tryLoadState();
     },
 

@@ -7,6 +7,7 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -212,6 +213,41 @@ func (s *Scheduler) RunNow(flOnlyOverride bool) (started bool, reason string) {
 	return true, ""
 }
 
+// RunDryNow triggers an immediate, one-off dry run: it fetches the real
+// balance and reports what would be purchased, but never calls a buy
+// endpoint. This is a manual, on-demand action only — the scheduler itself
+// never does a dry run on its own, and a dry run never reschedules the next
+// real run or updates cumulative totals.
+func (s *Scheduler) RunDryNow() (started bool, reason string) {
+	var until time.Time
+	limited := false
+	s.store.View(func(st store.State) {
+		if st.RateLimitedUntil != nil && time.Now().Before(*st.RateLimitedUntil) {
+			limited, until = true, *st.RateLimitedUntil
+		}
+	})
+	if limited {
+		return false, fmt.Sprintf("Rate limited by MAM. Runs resume %s.", until.Format("15:04 on 2 Jan"))
+	}
+
+	s.mu.Lock()
+	if s.running {
+		s.mu.Unlock()
+		return false, "A run is already in progress."
+	}
+	s.running = true
+	s.mu.Unlock()
+	go func() {
+		defer func() {
+			s.mu.Lock()
+			s.running = false
+			s.mu.Unlock()
+		}()
+		s.runOnce(false, true)
+	}()
+	return true, ""
+}
+
 // IsRunning reports whether an automation pass is currently executing.
 func (s *Scheduler) IsRunning() bool {
 	s.mu.Lock()
@@ -286,7 +322,7 @@ func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
 		s.mu.Unlock()
 	}()
 
-	s.runOnce(flOnlyOverride)
+	s.runOnce(flOnlyOverride, false)
 
 	_ = s.store.Update(func(st *store.State) {
 		if !st.SchedulerOn || st.Paused {
@@ -324,9 +360,9 @@ func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
 	})
 }
 
-func (s *Scheduler) runOnce(flOnlyOverride bool) {
+func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 	startedAt := time.Now()
-	entry := store.HistoryEntry{StartedAt: startedAt, CreatedAt: startedAt, Result: "Completed"}
+	entry := store.HistoryEntry{StartedAt: startedAt, CreatedAt: startedAt, Result: "Completed", DryRun: dryRun}
 
 	s.clearRateLimit()
 
@@ -391,7 +427,9 @@ func (s *Scheduler) runOnce(flOnlyOverride bool) {
 		if expiry, err := client.VIPExpiry(); err == nil {
 			remaining := time.Until(expiry)
 			if remaining.Hours()/24 <= mamclient.VIPRenewDays {
-				if err := client.BuyVIP(); err == nil {
+				if dryRun {
+					vipPurchased = true
+				} else if err := client.BuyVIP(); err == nil {
 					if newPoints, err := client.SeedBonus(uid); err == nil && newPoints < points {
 						vipPurchased = true
 						points = newPoints
@@ -414,14 +452,19 @@ func (s *Scheduler) runOnce(flOnlyOverride bool) {
 
 	wedgesPurchased := 0
 	if shouldBuyWedge && points >= mamclient.FLWedgeCost+cfg.PointsBuffer {
-		before := points
-		if err := client.BuyFreeleechWedge(); err != nil {
-			s.log.Warn().Err(err).Msg("freeleech wedge purchase failed")
-		} else if newPoints, err := client.SeedBonus(uid); err == nil && before-newPoints >= mamclient.FLWedgeCost {
+		if dryRun {
 			wedgesPurchased = 1
-			points = newPoints
-			if cfg.UploadStrategy == store.StrategyAlternate {
-				s.setAlternateTarget("upload_credit")
+			points -= mamclient.FLWedgeCost
+		} else {
+			before := points
+			if err := client.BuyFreeleechWedge(); err != nil {
+				s.log.Warn().Err(err).Msg("freeleech wedge purchase failed")
+			} else if newPoints, err := client.SeedBonus(uid); err == nil && before-newPoints >= mamclient.FLWedgeCost {
+				wedgesPurchased = 1
+				points = newPoints
+				if cfg.UploadStrategy == store.StrategyAlternate {
+					s.setAlternateTarget("upload_credit")
+				}
 			}
 		}
 	}
@@ -443,25 +486,30 @@ func (s *Scheduler) runOnce(flOnlyOverride bool) {
 		// the live API. This floor is MAM's, not a design choice of ours,
 		// so it's enforced here regardless of the configured cap.
 		if gb >= mamclient.MinUploadGB {
-			before := points
-			if err := client.BuyUploadCredit(gb); err != nil {
-				s.log.Warn().Err(err).Msg("upload credit purchase failed")
-			} else if newPoints, err := client.SeedBonus(uid); err != nil {
-				// The purchase request itself succeeded, but we can't
-				// confirm the outcome — MAM is the source of truth for the
-				// balance, not our own arithmetic, so an unconfirmed
-				// purchase must not be recorded as GB bought or points
-				// spent. Flag it loudly: this is the one scenario where
-				// money may have moved with no local record of it.
-				s.log.Error().Err(err).Msg("upload credit purchase sent, but balance re-check failed afterward — unable to confirm outcome, points may have been spent without being recorded")
-			} else if newPoints < before {
-				points = newPoints
+			if dryRun {
 				uploadGB = gb
-				if cfg.UploadStrategy == store.StrategyAlternate {
-					s.setAlternateTarget("freeleech_wedge")
-				}
+				points -= gb * mamclient.PointsPerGB
 			} else {
-				s.log.Warn().Msg("upload credit purchase request succeeded but balance did not decrease — treating as failed")
+				before := points
+				if err := client.BuyUploadCredit(gb); err != nil {
+					s.log.Warn().Err(err).Msg("upload credit purchase failed")
+				} else if newPoints, err := client.SeedBonus(uid); err != nil {
+					// The purchase request itself succeeded, but we can't
+					// confirm the outcome — MAM is the source of truth for the
+					// balance, not our own arithmetic, so an unconfirmed
+					// purchase must not be recorded as GB bought or points
+					// spent. Flag it loudly: this is the one scenario where
+					// money may have moved with no local record of it.
+					s.log.Error().Err(err).Msg("upload credit purchase sent, but balance re-check failed afterward — unable to confirm outcome, points may have been spent without being recorded")
+				} else if newPoints < before {
+					points = newPoints
+					uploadGB = gb
+					if cfg.UploadStrategy == store.StrategyAlternate {
+						s.setAlternateTarget("freeleech_wedge")
+					}
+				} else {
+					s.log.Warn().Msg("upload credit purchase request succeeded but balance did not decrease — treating as failed")
+				}
 			}
 		}
 	}
@@ -470,11 +518,15 @@ func (s *Scheduler) runOnce(flOnlyOverride bool) {
 	// running arithmetic through the purchases above — MAM's own reported
 	// balance is the only honest source of truth for what actually
 	// happened this run, regardless of how each individual purchase step
-	// verified (or failed to verify) itself.
-	if finalPoints, err := client.SeedBonus(uid); err != nil {
-		s.log.Error().Err(err).Msg("final balance re-check failed — recorded totals for this run reflect our own bookkeeping, not a confirmed MAM balance")
-	} else {
-		points = finalPoints
+	// verified (or failed to verify) itself. A dry run never called a buy
+	// endpoint, so re-checking here would just overwrite our projected
+	// points with the real (unchanged) balance.
+	if !dryRun {
+		if finalPoints, err := client.SeedBonus(uid); err != nil {
+			s.log.Error().Err(err).Msg("final balance re-check failed — recorded totals for this run reflect our own bookkeeping, not a confirmed MAM balance")
+		} else {
+			points = finalPoints
+		}
 	}
 
 	pointsSpent := initialPoints - points
@@ -486,8 +538,20 @@ func (s *Scheduler) runOnce(flOnlyOverride bool) {
 	entry.UploadGB = uploadGB
 	entry.FreeleechWedges = wedgesPurchased
 	entry.VIPPurchased = vipPurchased
-	s.recordPoints(points)
 
+	if dryRun {
+		entry.Result = dryRunSummary(vipPurchased, uploadGB, wedgesPurchased)
+		s.appendHistory(entry)
+		s.log.Info().
+			Int("points_spent", pointsSpent).
+			Int("upload_gb", uploadGB).
+			Int("wedges", wedgesPurchased).
+			Bool("vip", vipPurchased).
+			Msg("dry run complete")
+		return
+	}
+
+	s.recordPoints(points)
 	s.updateTotals(uploadGB, pointsSpent, wedgesPurchased, vipPurchased)
 	s.appendHistory(entry)
 	s.log.Info().
@@ -496,6 +560,26 @@ func (s *Scheduler) runOnce(flOnlyOverride bool) {
 		Int("wedges", wedgesPurchased).
 		Bool("vip", vipPurchased).
 		Msg("automation run complete")
+}
+
+// dryRunSummary describes, in prose, what a dry run determined it would
+// have purchased, so the history table's Result column doesn't just say
+// "Completed" for a run that bought nothing for real.
+func dryRunSummary(vip bool, uploadGB, wedges int) string {
+	var parts []string
+	if vip {
+		parts = append(parts, "VIP renewal")
+	}
+	if uploadGB > 0 {
+		parts = append(parts, fmt.Sprintf("%d GiB upload credit", uploadGB))
+	}
+	if wedges > 0 {
+		parts = append(parts, fmt.Sprintf("%d freeleech wedge", wedges))
+	}
+	if len(parts) == 0 {
+		return "Would buy nothing this run."
+	}
+	return "Would buy " + strings.Join(parts, ", ") + "."
 }
 
 func (s *Scheduler) setAlternateTarget(next string) {
