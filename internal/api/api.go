@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -167,16 +168,27 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	currentPoints, havePoints := s.scheduler.PointsStatus()
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"settings":          publicSettings(resolved),
-		"totals":            st.Totals,
-		"history":           reversed(st.History),
-		"scheduler_enabled": st.SchedulerOn,
-		"paused":            st.Paused,
-		"running":           s.scheduler.IsRunning(),
-		"next_run_time":     st.NextRunTime,
-		"current_points":    currentPoints,
-		"have_points":       havePoints,
+		"settings":           publicSettings(resolved),
+		"totals":             st.Totals,
+		"history":            reversed(st.History),
+		"scheduler_enabled":  st.SchedulerOn,
+		"paused":             st.Paused,
+		"running":            s.scheduler.IsRunning(),
+		"next_run_time":      st.NextRunTime,
+		"current_points":     currentPoints,
+		"have_points":        havePoints,
+		"rate_limited_until": rateLimitedUntil(st),
 	})
+}
+
+// rateLimitedUntil reports an active MAM rate-limit backoff, or nil if none
+// is in effect. An expired window reads as nil rather than a past timestamp,
+// so the UI never has to reason about whether it has lapsed.
+func rateLimitedUntil(st store.State) *time.Time {
+	if st.RateLimitedUntil == nil || !time.Now().Before(*st.RateLimitedUntil) {
+		return nil
+	}
+	return st.RateLimitedUntil
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
@@ -235,8 +247,12 @@ func (s *Server) handleRun(w http.ResponseWriter, r *http.Request) {
 		FLOnlyOverride bool `json:"fl_only_override"`
 	}
 	_ = readJSON(r, &req)
-	started := s.scheduler.RunNow(req.FLOnlyOverride)
-	writeJSON(w, http.StatusOK, map[string]bool{"started": started})
+	started, reason := s.scheduler.RunNow(req.FLOnlyOverride)
+	resp := map[string]any{"started": started}
+	if reason != "" {
+		resp["reason"] = reason
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // applySettingsPatch applies whitelisted, validated fields from incoming

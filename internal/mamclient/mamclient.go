@@ -79,6 +79,17 @@ func (c *Client) get(path string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 429 is the standard rate-limit status; 503 with a Retry-After is the
+	// other shape a limiter commonly takes. Both are reported as a typed
+	// RateLimitError so the scheduler can back off rather than retrying on
+	// its normal cadence, which is what turns a brief limit into a long one.
+	if resp.StatusCode == http.StatusTooManyRequests ||
+		(resp.StatusCode == http.StatusServiceUnavailable && resp.Header.Get("Retry-After") != "") {
+		return nil, &RateLimitError{
+			RetryAfter: parseRetryAfter(resp.Header),
+			StatusCode: resp.StatusCode,
+		}
+	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("mam http %d", resp.StatusCode)
 	}

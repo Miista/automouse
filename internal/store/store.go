@@ -89,14 +89,18 @@ type Auth struct {
 
 // State is the full persisted document.
 type State struct {
-	Admin       *Admin         `json:"admin,omitempty"`
-	Auth        Auth           `json:"auth"`
-	Settings    Settings       `json:"settings"`
-	Totals      Totals         `json:"totals"`
-	SchedulerOn bool           `json:"scheduler_enabled"`
-	Paused      bool           `json:"paused"`
-	NextRunTime *time.Time     `json:"next_run_time,omitempty"`
-	History     []HistoryEntry `json:"history"`
+	Admin       *Admin   `json:"admin,omitempty"`
+	Auth        Auth     `json:"auth"`
+	Settings    Settings `json:"settings"`
+	Totals      Totals   `json:"totals"`
+	SchedulerOn bool     `json:"scheduler_enabled"`
+	// RateLimitedUntil is set when MAM rate-limits us. While it is in the
+	// future no run fires, and it is persisted so a restart cannot be used
+	// (accidentally or otherwise) to bypass the backoff.
+	RateLimitedUntil *time.Time     `json:"rate_limited_until,omitempty"`
+	Paused           bool           `json:"paused"`
+	NextRunTime      *time.Time     `json:"next_run_time,omitempty"`
+	History          []HistoryEntry `json:"history"`
 }
 
 const maxHistory = 300

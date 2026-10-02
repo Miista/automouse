@@ -5,6 +5,8 @@
 package scheduler
 
 import (
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -57,6 +59,9 @@ func (s *Scheduler) pointsRefreshLoop() {
 	ticker := time.NewTicker(pointsRefreshInterval)
 	defer ticker.Stop()
 	for range ticker.C {
+		if s.rateLimited() {
+			continue
+		}
 		s.RefreshPoints()
 	}
 }
@@ -67,6 +72,9 @@ func (s *Scheduler) loop() {
 	for range ticker.C {
 		due := false
 		s.store.View(func(st store.State) {
+			if st.RateLimitedUntil != nil && time.Now().Before(*st.RateLimitedUntil) {
+				return
+			}
 			due = st.SchedulerOn && !st.Paused && st.NextRunTime != nil && !time.Now().Before(*st.NextRunTime)
 		})
 		if !due {
@@ -83,6 +91,47 @@ func (s *Scheduler) loop() {
 		}
 		go s.runAndReschedule(false)
 	}
+}
+
+// rateLimited reports whether a MAM rate-limit backoff is currently in
+// effect.
+func (s *Scheduler) rateLimited() bool {
+	limited := false
+	s.store.View(func(st store.State) {
+		limited = st.RateLimitedUntil != nil && time.Now().Before(*st.RateLimitedUntil)
+	})
+	return limited
+}
+
+// noteRateLimit records a backoff window and pushes the next run out past
+// it. Returns the time runs resume. Both values are persisted: the window so
+// a restart can't bypass it, and NextRunTime so the dashboard shows the real
+// next run rather than one that will be skipped.
+func (s *Scheduler) noteRateLimit(err *mamclient.RateLimitError) time.Time {
+	until := time.Now().Add(err.RetryAfter)
+	_ = s.store.Update(func(st *store.State) {
+		st.RateLimitedUntil = &until
+		if st.NextRunTime == nil || st.NextRunTime.Before(until) {
+			next := until
+			st.NextRunTime = &next
+		}
+	})
+	s.log.Warn().
+		Dur("retry_after", err.RetryAfter).
+		Time("resumes_at", until).
+		Int("status", err.StatusCode).
+		Msg("rate limited by MAM, backing off")
+	return until
+}
+
+// clearRateLimit drops an expired backoff so state doesn't carry a stale
+// timestamp around.
+func (s *Scheduler) clearRateLimit() {
+	_ = s.store.Update(func(st *store.State) {
+		if st.RateLimitedUntil != nil && !time.Now().Before(*st.RateLimitedUntil) {
+			st.RateLimitedUntil = nil
+		}
+	})
 }
 
 // StartSchedule enables the scheduler and arms the next run.
@@ -105,18 +154,32 @@ func (s *Scheduler) Pause() error {
 	})
 }
 
-// RunNow triggers an immediate out-of-band run, unless one is already
-// executing.
-func (s *Scheduler) RunNow(flOnlyOverride bool) bool {
+// RunNow triggers an immediate out-of-band run. It refuses while a run is
+// already executing, and while a MAM rate-limit backoff is in effect —
+// a manual trigger is exactly the thing most likely to be used repeatedly
+// against a limit, which is what prolongs it. reason is empty on success and
+// otherwise explains the refusal for display.
+func (s *Scheduler) RunNow(flOnlyOverride bool) (started bool, reason string) {
+	var until time.Time
+	limited := false
+	s.store.View(func(st store.State) {
+		if st.RateLimitedUntil != nil && time.Now().Before(*st.RateLimitedUntil) {
+			limited, until = true, *st.RateLimitedUntil
+		}
+	})
+	if limited {
+		return false, fmt.Sprintf("Rate limited by MAM. Runs resume %s.", until.Format("15:04 on 2 Jan"))
+	}
+
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
-		return false
+		return false, "A run is already in progress."
 	}
 	s.running = true
 	s.mu.Unlock()
 	go s.runAndReschedule(flOnlyOverride)
-	return true
+	return true, ""
 }
 
 // IsRunning reports whether an automation pass is currently executing.
@@ -151,6 +214,9 @@ func (s *Scheduler) PointsStatus() (currentPoints int, ok bool) {
 // refresh, not something that should surface as a failed "run".
 func (s *Scheduler) RefreshPoints() {
 	go func() {
+		if s.rateLimited() {
+			return
+		}
 		var cfg store.Settings
 		s.store.View(func(st store.State) {
 			cfg = settings.Resolve(st.Settings).Settings
@@ -161,10 +227,22 @@ func (s *Scheduler) RefreshPoints() {
 		client := mamclient.New(mamclient.Secret(cfg.MamID))
 		uid, err := client.UserID()
 		if err != nil || uid == "" {
+			// Errors here are otherwise deliberately silent (this is a
+			// convenience refresh, not a run), but a rate limit must still
+			// be recorded or the backoff never starts and this keeps
+			// firing into the limit.
+			var rl *mamclient.RateLimitError
+			if errors.As(err, &rl) {
+				s.noteRateLimit(rl)
+			}
 			return
 		}
 		points, err := client.SeedBonus(uid)
 		if err != nil {
+			var rl *mamclient.RateLimitError
+			if errors.As(err, &rl) {
+				s.noteRateLimit(rl)
+			}
 			return
 		}
 		s.recordPoints(points)
@@ -181,17 +259,26 @@ func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
 	s.runOnce(flOnlyOverride)
 
 	_ = s.store.Update(func(st *store.State) {
-		if st.SchedulerOn && !st.Paused {
-			delay := time.Duration(st.Settings.NextRunDelayMinutes) * time.Minute
-			next := time.Now().Add(delay)
-			st.NextRunTime = &next
+		if !st.SchedulerOn || st.Paused {
+			return
 		}
+		delay := time.Duration(st.Settings.NextRunDelayMinutes) * time.Minute
+		next := time.Now().Add(delay)
+		// Never schedule back inside an active backoff window: runOnce may
+		// have just set one, and the normal delay is typically shorter than
+		// the retry-after.
+		if st.RateLimitedUntil != nil && next.Before(*st.RateLimitedUntil) {
+			next = *st.RateLimitedUntil
+		}
+		st.NextRunTime = &next
 	})
 }
 
 func (s *Scheduler) runOnce(flOnlyOverride bool) {
 	startedAt := time.Now()
 	entry := store.HistoryEntry{StartedAt: startedAt, CreatedAt: startedAt, Result: "Completed"}
+
+	s.clearRateLimit()
 
 	var resolved settings.Resolved
 	s.store.View(func(st store.State) {
@@ -209,15 +296,37 @@ func (s *Scheduler) runOnce(flOnlyOverride bool) {
 	client := mamclient.New(mamclient.Secret(cfg.MamID))
 
 	uid, err := client.UserID()
-	if err != nil || uid == "" {
+	if err != nil {
+		// A rate limit is not a bad cookie, and saying so would send the
+		// user off to re-check a session that is perfectly fine.
+		var rl *mamclient.RateLimitError
+		if errors.As(err, &rl) {
+			until := s.noteRateLimit(rl)
+			entry.Result = fmt.Sprintf("Rate limited by MAM. Runs resume %s.", until.Format("15:04 on 2 Jan"))
+			s.appendHistory(entry)
+			return
+		}
 		entry.Result = "Session invalid. Check Mam Session_ID."
 		s.log.Warn().Err(err).Msg(entry.Result)
+		s.appendHistory(entry)
+		return
+	}
+	if uid == "" {
+		entry.Result = "Session invalid. Check Mam Session_ID."
+		s.log.Warn().Msg(entry.Result)
 		s.appendHistory(entry)
 		return
 	}
 
 	points, err := client.SeedBonus(uid)
 	if err != nil {
+		var rl *mamclient.RateLimitError
+		if errors.As(err, &rl) {
+			until := s.noteRateLimit(rl)
+			entry.Result = fmt.Sprintf("Rate limited by MAM. Runs resume %s.", until.Format("15:04 on 2 Jan"))
+			s.appendHistory(entry)
+			return
+		}
 		entry.Result = "Failed to retrieve bonus points."
 		s.log.Warn().Err(err).Msg(entry.Result)
 		s.appendHistory(entry)

@@ -155,8 +155,17 @@ function App() {
 
     get statusLabel() {
       if (this.state.running) return 'Running now';
+      // A rate-limit backoff outranks the scheduled/paused distinction:
+      // the scheduler may well be active, but nothing will fire until the
+      // window passes, and saying "Scheduled" would be misleading.
+      if (this.rateLimited) return 'Rate limited';
       if (this.state.paused || !this.state.scheduler_enabled) return 'Paused';
       return 'Scheduled';
+    },
+
+    get rateLimited() {
+      const until = this.state.rate_limited_until;
+      return !!until && new Date(until) > new Date();
     },
 
     formatTime(value) {
