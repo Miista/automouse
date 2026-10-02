@@ -51,13 +51,17 @@ func cheapestThreshold(cfg store.Settings) (threshold int, ok bool) {
 }
 
 // projectionReason renders the skip as something a user can act on: how
-// short we are, and how fast that gap is closing. Without it the dashboard
-// would show a next run hours or days out with no explanation, which reads
-// like the scheduler has stalled.
-func projectionReason(balance, threshold int, ratePerHour float64) string {
+// short we are, how fast that gap is closing, and when it closes. Without it
+// the dashboard would show a next run hours or days out with no explanation,
+// which reads like the scheduler has stalled.
+//
+// The ETA is spelled out rather than left to the "Next run" line above it,
+// because the same sentence is written into run history, where it stands on
+// its own with no surrounding context.
+func projectionReason(balance, threshold int, ratePerHour float64, eta time.Time) string {
 	return fmt.Sprintf(
-		"Waiting for points: %s short of the %s needed for the next purchase, earning about %.0f/hour.",
-		humanInt(threshold-balance), humanInt(threshold), ratePerHour,
+		"Waiting for points: %s short of the %s needed for the next purchase, earning about %.0f/hour — expected %s.",
+		humanInt(threshold-balance), humanInt(threshold), ratePerHour, eta.Format("15:04 on 2 Jan"),
 	)
 }
 

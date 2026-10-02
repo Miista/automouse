@@ -307,7 +307,7 @@ func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
 			if balance, have := s.PointsStatus(); have {
 				if eta, ok := projectNextUsefulRun(balance, threshold, st.Accrual.PointsPerHour, now); ok && eta.After(next) {
 					next = eta
-					reason = projectionReason(balance, threshold, st.Accrual.PointsPerHour)
+					reason = projectionReason(balance, threshold, st.Accrual.PointsPerHour, eta)
 				}
 			}
 		}

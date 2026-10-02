@@ -208,8 +208,9 @@ func TestProjectNextUsefulRun(t *testing.T) {
 // TestProjectionReasonIsReadable pins that the dashboard gets a sentence a
 // user can act on, not a bare timestamp.
 func TestProjectionReasonIsReadable(t *testing.T) {
-	got := projectionReason(4088, 35000, 118.9)
-	const want = "Waiting for points: 30,912 short of the 35,000 needed for the next purchase, earning about 119/hour."
+	eta := time.Date(2026, 10, 13, 6, 13, 0, 0, time.UTC)
+	got := projectionReason(4088, 35000, 118.9, eta)
+	const want = "Waiting for points: 30,912 short of the 35,000 needed for the next purchase, earning about 119/hour — expected 06:13 on 13 Oct."
 	if got != want {
 		t.Errorf("reason = %q\nwant      %q", got, want)
 	}
