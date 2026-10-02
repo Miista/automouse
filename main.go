@@ -26,10 +26,9 @@ func main() {
 		dataDir = "/app/data"
 	}
 	const addr = ":8765"
-	staticDir := os.Getenv("AUTOMOUSE_STATIC_DIR")
-	if staticDir == "" {
-		staticDir = "web/static"
-	}
+	// The image sets WORKDIR / and copies the dashboard to /web/static, so
+	// this relative path always resolves.
+	const staticDir = "web/static"
 
 	st, err := store.Open(dataDir)
 	if err != nil {
@@ -50,7 +49,7 @@ func main() {
 	server.Routes(mux)
 	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 
-	log.Info().Str("addr", addr).Str("data_dir", dataDir).Str("static_dir", staticDir).Msg("starting automouse")
+	log.Info().Str("addr", addr).Str("data_dir", dataDir).Msg("starting automouse")
 
 	httpServer := &http.Server{
 		Addr:              addr,

@@ -54,14 +54,12 @@ costs points) and three of the four layouts in `mamDateLayouts` (MAM only
 emits `2006-01-02 15:04:05`). A test pins that live format so a change
 surfaces as a failure rather than a silent 1970 epoch.
 
-Run locally without Docker:
-
-```sh
-go build -o automouse . && AUTOMOUSE_DATA_DIR=./data AUTOMOUSE_STATIC_DIR=web/static ./automouse
-```
-
-Note the Dockerfile does **not** build Go — it copies a host-prebuilt binary
-into a `scratch` image. `make docker` depends on `make build` for that reason.
+Deployment is Docker-only. The Dockerfile does **not** build Go — it copies a
+host-prebuilt binary into a `scratch` image, which is why `make docker`
+depends on `make build`. It sets `WORKDIR /` and copies the dashboard to
+`/web/static`, so `main.go`'s relative `web/static` constant resolves; to run
+the binary directly when debugging, do it from the repo root for the same
+reason.
 
 ## Architecture
 
