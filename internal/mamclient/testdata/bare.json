@@ -1,0 +1,13 @@
+{
+  "classname": "VIP",
+  "downloaded": "1.00 GiB",
+  "downloaded_bytes": 1073741824,
+  "ratio": 10.0,
+  "seedbonus": 5000,
+  "uid": 123456,
+  "uploaded": "10.00 GiB",
+  "uploaded_bytes": 10737418240,
+  "username": "testuser",
+  "vip_until": "2099-01-01 00:00:00",
+  "wedges": 1
+}

@@ -1,0 +1,87 @@
+{
+  "classname": "VIP",
+  "downloaded": "1.00 GiB",
+  "downloaded_bytes": 1073741824,
+  "ratio": 10.0,
+  "seedbonus": 5000,
+  "snatch_summary": {
+    "connectable": "yes",
+    "created": 1600000000,
+    "created_at": "2020-09-13 12:26:40",
+    "duplicates": {
+      "count": 0,
+      "name": "Duplicate peer entries"
+    },
+    "inactHnr": {
+      "count": 0,
+      "name": "Not Seeding - H&R - Not Yet Satisfied",
+      "size": null
+    },
+    "inactSat": {
+      "count": 0,
+      "name": "Not Seeding - Satisfied",
+      "size": null
+    },
+    "inactUnsat": {
+      "count": 0,
+      "name": "Not Seeding - Not Yet Satisfied",
+      "size": null
+    },
+    "ipv6_mac": false,
+    "ite": {
+      "count": 0,
+      "latest": 0,
+      "name": "Important Tracker Errors"
+    },
+    "leeching": {
+      "count": 0,
+      "name": "Leeching Torrents",
+      "size": null
+    },
+    "partial": false,
+    "recently_deleted": 0,
+    "reseed": {
+      "count": 0,
+      "inactive": 0,
+      "name": "Reseed requests"
+    },
+    "sSat": {
+      "count": 10,
+      "name": "Seeding - Satisfied",
+      "size": 1073741824
+    },
+    "seedHnr": {
+      "count": 0,
+      "name": "Seeding - H&R - Not Yet Satisfied",
+      "size": null
+    },
+    "seedUnsat": {
+      "count": 2,
+      "name": "Seeding - Not Yet Satisfied",
+      "size": 214748364
+    },
+    "unsat": {
+      "count": 2,
+      "limit": 150,
+      "name": "Unsatisfied",
+      "size": 214748364
+    },
+    "upAct": {
+      "count": 0,
+      "name": "Seeding -  Uploads",
+      "size": null
+    },
+    "upInact": {
+      "count": 0,
+      "name": "Not Seeding - Uploads",
+      "size": null
+    },
+    "v6_connectable": null
+  },
+  "uid": 123456,
+  "uploaded": "10.00 GiB",
+  "uploaded_bytes": 10737418240,
+  "username": "testuser",
+  "vip_until": "2099-01-01 00:00:00",
+  "wedges": 1
+}

@@ -44,18 +44,24 @@ const (
 type Client struct {
 	cookie Secret
 	http   *http.Client
+	// baseURL is the MAM origin all requests are made against. It is a
+	// field rather than a constant purely so tests can point the client at
+	// an httptest server serving recorded responses; production code never
+	// sets it and it defaults to baseURL.
+	baseURL string
 }
 
 // New creates a client authenticated with the given mam_id cookie value.
 func New(mamID Secret) *Client {
 	return &Client{
-		cookie: mamID,
-		http:   &http.Client{Timeout: 30 * time.Second},
+		cookie:  mamID,
+		http:    &http.Client{Timeout: 30 * time.Second},
+		baseURL: baseURL,
 	}
 }
 
 func (c *Client) get(path string) (map[string]any, error) {
-	req, err := http.NewRequest(http.MethodGet, baseURL+path, nil)
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
 		return nil, err
 	}
