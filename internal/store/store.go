@@ -45,7 +45,7 @@ func DefaultSettings() Settings {
 		AlternateNextPurchase: "freeleech_wedge",
 		PointsBuffer:          10000,
 		MaxUploadGBPerRun:     150,
-		NextRunDelayMinutes:   15,
+		NextRunDelayMinutes:   60,
 	}
 }
 

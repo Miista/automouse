@@ -16,6 +16,20 @@ import (
 
 const envPrefix = "AUTOMOUSE_SETTING_"
 
+// MinRunDelayMinutes is the shortest interval allowed between runs. Bonus
+// points accrue over days — a wedge costs 50,000 and VIP matters once every
+// ~83 days — so nothing is gained by polling MAM more often than hourly,
+// and a tool that spends points has no business making ~30 requests an hour
+// to discover a balance that barely moves. The delay is measured from when
+// a run finishes, so the real period is this plus the run's own duration.
+//
+// Enforced here, in Resolve, because this is the single funnel every
+// consumer passes through: clamping in the API handler alone would leave
+// the AUTOMOUSE_SETTING_NEXT_RUN_DELAY_MINUTES path unbounded, and a value
+// of 0 there would schedule the next run for "now" — firing on every
+// 5-second scheduler tick.
+const MinRunDelayMinutes = 60
+
 // Field describes one overridable setting.
 type Field struct {
 	Key            string
@@ -88,6 +102,12 @@ func Resolve(persisted store.Settings) Resolved {
 	apply("points_buffer", func(v string) { r.Settings.PointsBuffer = parseInt(v, r.Settings.PointsBuffer) })
 	apply("max_upload_gb_per_run", func(v string) { r.Settings.MaxUploadGBPerRun = parseInt(v, r.Settings.MaxUploadGBPerRun) })
 	apply("next_run_delay_minutes", func(v string) { r.Settings.NextRunDelayMinutes = parseInt(v, r.Settings.NextRunDelayMinutes) })
+
+	// Clamp after the env overrides are applied, so a persisted value and an
+	// env-pinned one are both held to the floor.
+	if r.Settings.NextRunDelayMinutes < MinRunDelayMinutes {
+		r.Settings.NextRunDelayMinutes = MinRunDelayMinutes
+	}
 	apply("mam_id", func(v string) { r.Settings.MamID = v })
 
 	return r

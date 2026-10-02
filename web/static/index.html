@@ -192,7 +192,7 @@
             <legend>Run behavior</legend>
             <div class="field-row" v-for="f in [
               {key:'points_buffer', label:'Points buffer', min:0, max:25000, hint:'Points always kept in reserve — purchases only spend the balance above this amount.'},
-              {key:'next_run_delay_minutes', label:'Minutes between runs', min:2, max:null, hint:'How often the scheduler checks in and runs the automation while started.'},
+              {key:'next_run_delay_minutes', label:'Minutes between runs', min:60, max:null, hint:'How long to wait after a run before starting the next one. Minimum 60 — bonus points accrue over days, so there is nothing to gain from checking more often.'},
             ]" :key="f.key">
               <label>{{ f.label }}</label>
               <div v-if="settings.env_managed[f.key]" class="locked-field">

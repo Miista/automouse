@@ -308,7 +308,7 @@ func applySettingsPatch(st *store.Settings, incoming map[string]any) {
 	// manages between runs — not user-settable directly.
 	setInt("points_buffer", &st.PointsBuffer, 0, 25000)
 	setInt("max_upload_gb_per_run", &st.MaxUploadGBPerRun, mamclient.MinUploadGB, 0)
-	setInt("next_run_delay_minutes", &st.NextRunDelayMinutes, 2, 0)
+	setInt("next_run_delay_minutes", &st.NextRunDelayMinutes, settings.MinRunDelayMinutes, 0)
 	setString("mam_id", &st.MamID)
 }
 
