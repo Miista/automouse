@@ -565,8 +565,16 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 			Int("upload_gb", uploadGB).
 			Int("wedges", wedgesPurchased).
 			Bool("vip", vipPurchased).
+			Strs("skipped", skipped).
 			Msg("dry run complete")
 		return
+	}
+
+	// Only explain a real run that bought nothing when something was
+	// actually skipped: an attempted purchase that failed leaves skipped
+	// empty, and must not be described as "nothing enabled".
+	if !vipPurchased && uploadGB == 0 && wedgesPurchased == 0 && len(skipped) > 0 {
+		entry.Result = "Bought nothing: " + strings.Join(skipped, "; ") + "."
 	}
 
 	s.recordPoints(points)
@@ -577,6 +585,7 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 		Int("upload_gb", uploadGB).
 		Int("wedges", wedgesPurchased).
 		Bool("vip", vipPurchased).
+		Strs("skipped", skipped).
 		Msg("automation run complete")
 }
 
