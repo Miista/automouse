@@ -422,21 +422,26 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 	initialPoints := points
 	entry.PointsBefore = points
 
+	// skipped collects why an enabled purchase didn't happen, so a dry run
+	// that buys nothing can say why instead of leaving the user to redo
+	// the buffer arithmetic by hand.
+	var skipped []string
+
 	vipPurchased := false
 	if cfg.BuyVIP {
 		if expiry, err := client.VIPExpiry(); err == nil {
 			remaining := time.Until(expiry)
-			if remaining.Hours()/24 <= mamclient.VIPRenewDays {
-				if dryRun {
+			if remaining.Hours()/24 > mamclient.VIPRenewDays {
+				skipped = append(skipped, fmt.Sprintf("VIP not due (%d days left)", int(remaining.Hours()/24)))
+			} else if dryRun {
+				vipPurchased = true
+			} else if err := client.BuyVIP(); err == nil {
+				if newPoints, err := client.SeedBonus(uid); err == nil && newPoints < points {
 					vipPurchased = true
-				} else if err := client.BuyVIP(); err == nil {
-					if newPoints, err := client.SeedBonus(uid); err == nil && newPoints < points {
-						vipPurchased = true
-						points = newPoints
-					}
-				} else {
-					s.log.Warn().Err(err).Msg("VIP purchase request failed")
+					points = newPoints
 				}
+			} else {
+				s.log.Warn().Err(err).Msg("VIP purchase request failed")
 			}
 		} else {
 			s.log.Warn().Err(err).Msg("failed to check VIP expiry")
@@ -451,6 +456,10 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 	shouldBuyUpload := !shouldBuyWedge && (cfg.UploadStrategy == store.StrategyUploadOnly || cfg.UploadStrategy == store.StrategyAlternate)
 
 	wedgesPurchased := 0
+	if shouldBuyWedge && points < mamclient.FLWedgeCost+cfg.PointsBuffer {
+		skipped = append(skipped, fmt.Sprintf("freeleech wedge needs %d points (%d + %d buffer), have %d",
+			mamclient.FLWedgeCost+cfg.PointsBuffer, mamclient.FLWedgeCost, cfg.PointsBuffer, points))
+	}
 	if shouldBuyWedge && points >= mamclient.FLWedgeCost+cfg.PointsBuffer {
 		if dryRun {
 			wedgesPurchased = 1
@@ -485,6 +494,15 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 		// upload at a time, due to log spam") — confirmed directly against
 		// the live API. This floor is MAM's, not a design choice of ours,
 		// so it's enforced here regardless of the configured cap.
+		if gb < mamclient.MinUploadGB {
+			if cfg.MaxUploadGBPerRun > 0 && cfg.MaxUploadGBPerRun < mamclient.MinUploadGB {
+				skipped = append(skipped, fmt.Sprintf("upload cap of %d GiB per run is below MAM's %d GiB minimum",
+					cfg.MaxUploadGBPerRun, mamclient.MinUploadGB))
+			} else {
+				skipped = append(skipped, fmt.Sprintf("upload credit: %d GiB affordable after %d point buffer, below MAM's %d GiB minimum (needs %d points)",
+					affordableGB, cfg.PointsBuffer, mamclient.MinUploadGB, mamclient.MinUploadGB*mamclient.PointsPerGB+cfg.PointsBuffer))
+			}
+		}
 		if gb >= mamclient.MinUploadGB {
 			if dryRun {
 				uploadGB = gb
@@ -540,7 +558,7 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 	entry.VIPPurchased = vipPurchased
 
 	if dryRun {
-		entry.Result = dryRunSummary(vipPurchased, uploadGB, wedgesPurchased)
+		entry.Result = dryRunSummary(vipPurchased, uploadGB, wedgesPurchased, skipped)
 		s.appendHistory(entry)
 		s.log.Info().
 			Int("points_spent", pointsSpent).
@@ -564,8 +582,9 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 
 // dryRunSummary describes, in prose, what a dry run determined it would
 // have purchased, so the history table's Result column doesn't just say
-// "Completed" for a run that bought nothing for real.
-func dryRunSummary(vip bool, uploadGB, wedges int) string {
+// "Completed" for a run that bought nothing for real. When nothing would
+// be bought, skipped explains why.
+func dryRunSummary(vip bool, uploadGB, wedges int, skipped []string) string {
 	var parts []string
 	if vip {
 		parts = append(parts, "VIP renewal")
@@ -577,7 +596,10 @@ func dryRunSummary(vip bool, uploadGB, wedges int) string {
 		parts = append(parts, fmt.Sprintf("%d freeleech wedge", wedges))
 	}
 	if len(parts) == 0 {
-		return "Would buy nothing this run."
+		if len(skipped) == 0 {
+			return "Would buy nothing this run: no purchase type is enabled."
+		}
+		return "Would buy nothing this run: " + strings.Join(skipped, "; ") + "."
 	}
 	return "Would buy " + strings.Join(parts, ", ") + "."
 }
