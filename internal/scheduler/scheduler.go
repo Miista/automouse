@@ -426,6 +426,10 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 	// that buys nothing can say why instead of leaving the user to redo
 	// the buffer arithmetic by hand.
 	var skipped []string
+	// failed collects purchases that were attempted and didn't take effect,
+	// with MAM's reason where it gave one, so the history entry can say so
+	// instead of reading "Completed" for a run that bought nothing.
+	var failed []string
 
 	vipPurchased := false
 	if cfg.BuyVIP {
@@ -440,9 +444,13 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 				if newPoints, err := client.SeedBonus(uid); err == nil && newPoints < points {
 					vipPurchased = true
 					points = newPoints
+				} else {
+					s.log.Warn().Err(err).Msg("VIP purchase request succeeded but balance did not decrease — treating as failed")
+					failed = append(failed, "VIP renewal: MAM accepted the request but the balance did not change")
 				}
 			} else {
 				s.log.Warn().Err(err).Msg("VIP purchase request failed")
+				failed = append(failed, "VIP renewal: "+purchaseError(err))
 			}
 		} else {
 			s.log.Warn().Err(err).Msg("failed to check VIP expiry")
@@ -469,6 +477,7 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 			before := points
 			if err := client.BuyFreeleechWedge(); err != nil {
 				s.log.Warn().Err(err).Msg("freeleech wedge purchase failed")
+				failed = append(failed, "freeleech wedge: "+purchaseError(err))
 			} else if newPoints, err := client.SeedBonus(uid); err == nil && before-newPoints >= mamclient.FLWedgeCost {
 				wedgesPurchased = 1
 				points = newPoints
@@ -512,6 +521,7 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 				before := points
 				if err := client.BuyUploadCredit(gb); err != nil {
 					s.log.Warn().Err(err).Msg("upload credit purchase failed")
+					failed = append(failed, "upload credit: "+purchaseError(err))
 				} else if newPoints, err := client.SeedBonus(uid); err != nil {
 					// The purchase request itself succeeded, but we can't
 					// confirm the outcome — MAM is the source of truth for the
@@ -571,12 +581,7 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 		return
 	}
 
-	// Only explain a real run that bought nothing when something was
-	// actually skipped: an attempted purchase that failed leaves skipped
-	// empty, and must not be described as "nothing enabled".
-	if !vipPurchased && uploadGB == 0 && wedgesPurchased == 0 && len(skipped) > 0 {
-		entry.Result = "Bought nothing: " + strings.Join(skipped, "; ") + "."
-	}
+	entry.Result = runSummary(vipPurchased, uploadGB, wedgesPurchased, skipped, failed)
 
 	s.recordPoints(points)
 	s.updateTotals(uploadGB, pointsSpent, wedgesPurchased, vipPurchased)
@@ -588,6 +593,45 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 		Bool("vip", vipPurchased).
 		Strs("skipped", skipped).
 		Msg("automation run complete")
+}
+
+// purchaseError renders a failed purchase for the history table, dropping the
+// client's "mam rejected request: " framing so MAM's own reason reads cleanly.
+func purchaseError(err error) string {
+	return strings.TrimPrefix(err.Error(), "mam rejected request: ")
+}
+
+// runSummary describes, in prose, what a real run did, so the history
+// table's Result column always says what happened rather than a bare
+// "Completed". Purchases that took effect come first; skipped and failed
+// explain what didn't, and when nothing was bought they are the reason.
+func runSummary(vip bool, uploadGB, wedges int, skipped, failed []string) string {
+	var bought []string
+	if vip {
+		bought = append(bought, "VIP renewal")
+	}
+	if uploadGB > 0 {
+		bought = append(bought, fmt.Sprintf("%d GiB upload credit", uploadGB))
+	}
+	if wedges > 0 {
+		bought = append(bought, fmt.Sprintf("%d freeleech wedge", wedges))
+	}
+	var why []string
+	why = append(why, skipped...)
+	if len(failed) > 0 {
+		why = append(why, "purchase failed — "+strings.Join(failed, "; "))
+	}
+	if len(bought) == 0 {
+		if len(why) == 0 {
+			return "Bought nothing: no purchase type is enabled."
+		}
+		return "Bought nothing: " + strings.Join(why, "; ") + "."
+	}
+	out := "Bought " + strings.Join(bought, ", ") + "."
+	if len(failed) > 0 {
+		out += " Purchase failed — " + strings.Join(failed, "; ") + "."
+	}
+	return out
 }
 
 // dryRunSummary describes, in prose, what a dry run determined it would
