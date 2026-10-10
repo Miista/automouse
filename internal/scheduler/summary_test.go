@@ -10,7 +10,7 @@ func TestDryRunSummary(t *testing.T) {
 		skipped []string
 		want    string
 	}{
-		{"buys", true, 50, 0, nil, "Would buy VIP renewal, 50 GiB upload credit."},
+		{"buys", true, 50, 0, nil, "Would buy VIP renewal (cost estimated), 50 GiB upload credit."},
 		{"nothing enabled", false, 0, 0, nil, "Would buy nothing this run: no purchase type is enabled."},
 		{"explains skip", false, 0, 0, []string{"a", "b"}, "Would buy nothing this run: a; b."},
 		{"purchase wins over skip", false, 50, 0, []string{"VIP not due"}, "Would buy 50 GiB upload credit."},

@@ -435,6 +435,7 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 				skipped = append(skipped, fmt.Sprintf("VIP not due (%d days left)", int(remaining.Hours()/24)))
 			} else if dryRun {
 				vipPurchased = true
+				points -= mamclient.EstimateVIPCost(remaining.Hours() / 24)
 			} else if err := client.BuyVIP(); err == nil {
 				if newPoints, err := client.SeedBonus(uid); err == nil && newPoints < points {
 					vipPurchased = true
@@ -596,7 +597,7 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 func dryRunSummary(vip bool, uploadGB, wedges int, skipped []string) string {
 	var parts []string
 	if vip {
-		parts = append(parts, "VIP renewal")
+		parts = append(parts, "VIP renewal (cost estimated)")
 	}
 	if uploadGB > 0 {
 		parts = append(parts, fmt.Sprintf("%d GiB upload credit", uploadGB))

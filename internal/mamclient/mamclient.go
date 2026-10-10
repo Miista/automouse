@@ -30,13 +30,33 @@ const (
 	// purchase is worth making. `bonusBuy.php?spendtype=VIP&duration=max`
 	// doesn't add a fixed number of days — it tops VIP up to a 90-day cap,
 	// with a guaranteed minimum grant of 7 days per purchase (confirmed
-	// directly against MAM's account owner, 2026-09-30). Renewing any
-	// earlier than 90-7=83 days remaining would only buy a partial top-up
-	// you're not yet eligible for the full benefit of, since the cap blocks
-	// going past 90 — so 83 is the latest point at which a renewal is
-	// guaranteed to be a full, non-wasteful 7+ day top-up.
+	// directly against MAM's account owner, 2026-09-30, and MAM's API docs).
+	// The 7-day minimum applies even when it overshoots the 90-day limit, so
+	// with more than 90-7=83 days remaining a purchase pays for days past the
+	// cap — 83 is the latest point at which a renewal is guaranteed to be a
+	// full, non-wasteful 7+ day top-up, and nothing is bought above it.
 	VIPRenewDays = 83
+	// VIPMaxDays is the cap `duration=max` tops VIP up to, and
+	// VIPMinGrantDays the least a purchase grants (604800s).
+	VIPMaxDays      = 90
+	VIPMinGrantDays = 7
+	// VIPPointsPerDay is MAM's VIP price: exactly linear — 4 weeks cost 5000,
+	// 8 weeks 10000, 12 weeks 15000 (confirmed by the account owner). MAM
+	// exposes no way to read the price without buying, so this is only used
+	// to project a dry run's balance, never for real runs.
+	VIPPointsPerDay = 5000.0 / 28
 )
+
+// EstimateVIPCost guesses what a `duration=max` renewal costs given the days
+// of VIP remaining: it tops up to VIPMaxDays but never grants fewer than
+// VIPMinGrantDays.
+func EstimateVIPCost(daysRemaining float64) int {
+	grant := VIPMaxDays - daysRemaining
+	if grant < VIPMinGrantDays {
+		grant = VIPMinGrantDays
+	}
+	return int(grant * VIPPointsPerDay)
+}
 
 // Client makes authenticated requests to MAM using the mam_id session
 // cookie. The cookie is held as a Secret so it can never be accidentally
