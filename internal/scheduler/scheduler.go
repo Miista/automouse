@@ -435,11 +435,17 @@ func (s *Scheduler) runOnce(flOnlyOverride, dryRun bool) {
 	if cfg.BuyVIP {
 		if expiry, err := client.VIPExpiry(); err == nil {
 			remaining := time.Until(expiry)
+			// MAM exposes no VIP price before buying, so the buffer check
+			// uses an estimate; the real price has been within a few points.
+			vipCost := mamclient.EstimateVIPCost(remaining.Hours() / 24)
 			if remaining.Hours()/24 > mamclient.VIPRenewDays {
 				skipped = append(skipped, fmt.Sprintf("VIP not due (%d days left)", int(remaining.Hours()/24)))
+			} else if points < vipCost+cfg.PointsBuffer {
+				skipped = append(skipped, fmt.Sprintf("VIP renewal needs about %d points (%d + %d buffer), have %d",
+					vipCost+cfg.PointsBuffer, vipCost, cfg.PointsBuffer, points))
 			} else if dryRun {
 				vipPurchased = true
-				points -= mamclient.EstimateVIPCost(remaining.Hours() / 24)
+				points -= vipCost
 			} else if err := client.BuyVIP(); err == nil {
 				if newPoints, err := client.SeedBonus(uid); err == nil && newPoints < points {
 					vipPurchased = true
