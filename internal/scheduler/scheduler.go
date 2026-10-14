@@ -145,6 +145,8 @@ func (s *Scheduler) noteRateLimit(err *mamclient.RateLimitError) time.Time {
 		if st.NextRunTime == nil || st.NextRunTime.Before(until) {
 			next := until
 			st.NextRunTime = &next
+			st.NextRunReason = "Backing off after MyAnonamouse rate limited us."
+			st.NextRunProjected = false
 		}
 	})
 	s.log.Warn().
@@ -173,6 +175,8 @@ func (s *Scheduler) StartSchedule() error {
 		st.SchedulerOn = true
 		st.Paused = false
 		st.NextRunTime = &next
+		st.NextRunReason = ""
+		st.NextRunProjected = false
 	})
 }
 
@@ -312,7 +316,41 @@ func (s *Scheduler) RefreshPoints() {
 			return
 		}
 		s.recordPoints(points)
+		s.reproject(points)
 	}()
+}
+
+// reproject revises a points-projected next run against a fresh balance.
+// The projection is made once, when a run finishes, so without this the
+// dashboard keeps quoting the shortfall from that moment while the balance
+// climbs past it. It only ever pulls the run earlier: re-capping from "now"
+// on every refresh would push a capped run out forever.
+func (s *Scheduler) reproject(balance int) {
+	_ = s.store.Update(func(st *store.State) {
+		if !st.SchedulerOn || st.Paused || !st.NextRunProjected || st.NextRunTime == nil {
+			return
+		}
+		now := time.Now()
+		cfg := settings.Resolve(st.Settings).Settings
+		threshold, ok := cheapestThreshold(cfg)
+		if !ok {
+			return
+		}
+		eta, ok := projectNextUsefulRun(balance, threshold, st.Accrual.PointsPerHour, now)
+		if !ok {
+			// Threshold met (or no usable rate): the wait is over.
+			st.NextRunTime = &now
+			st.NextRunReason = ""
+			st.NextRunProjected = false
+			return
+		}
+		next := *st.NextRunTime
+		if eta.Before(next) {
+			next = eta
+		}
+		st.NextRunTime = &next
+		st.NextRunReason = projectionReason(balance, threshold, st.Accrual.PointsPerHour, now, next)
+	})
 }
 
 func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
@@ -332,6 +370,7 @@ func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
 		delay := time.Duration(st.Settings.NextRunDelayMinutes) * time.Minute
 		next := now.Add(delay)
 		reason := ""
+		projected := false
 
 		// Skip ahead when the balance cannot reach the cheapest purchase by
 		// the next scheduled run: every run before then is a guaranteed
@@ -343,7 +382,8 @@ func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
 			if balance, have := s.PointsStatus(); have {
 				if eta, ok := projectNextUsefulRun(balance, threshold, st.Accrual.PointsPerHour, now); ok && eta.After(next) {
 					next = eta
-					reason = projectionReason(balance, threshold, st.Accrual.PointsPerHour, eta)
+					reason = projectionReason(balance, threshold, st.Accrual.PointsPerHour, now, eta)
+					projected = true
 				}
 			}
 		}
@@ -354,9 +394,11 @@ func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
 		if st.RateLimitedUntil != nil && next.Before(*st.RateLimitedUntil) {
 			next = *st.RateLimitedUntil
 			reason = "Backing off after MyAnonamouse rate limited us."
+			projected = false
 		}
 		st.NextRunTime = &next
 		st.NextRunReason = reason
+		st.NextRunProjected = projected
 	})
 }
 

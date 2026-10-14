@@ -57,12 +57,19 @@ func cheapestThreshold(cfg store.Settings) (threshold int, ok bool) {
 //
 // The ETA is spelled out rather than left to the "Next run" line above it,
 // because the same sentence is written into run history, where it stands on
-// its own with no surrounding context.
-func projectionReason(balance, threshold int, ratePerHour float64, eta time.Time) string {
-	return fmt.Sprintf(
-		"Waiting for points: %s short of the %s needed for the next purchase, earning about %.0f/hour — expected %s.",
-		humanInt(threshold-balance), humanInt(threshold), ratePerHour, eta.Format("15:04 on 2 Jan"),
-	)
+// its own with no surrounding context. When next falls before the projected
+// arrival (maxSkipAhead capped it), the sentence says it is an interim check
+// rather than passing the cap off as the estimate.
+func projectionReason(balance, threshold int, ratePerHour float64, now, next time.Time) string {
+	short := threshold - balance
+	head := fmt.Sprintf("Waiting for points: %s short of the %s needed for the next purchase, earning about %.0f/hour",
+		humanInt(short), humanInt(threshold), ratePerHour)
+	arrival := now.Add(time.Duration(float64(short) / ratePerHour * float64(time.Hour)))
+	if next.Before(arrival.Add(-time.Minute)) {
+		return fmt.Sprintf("%s — expected %s; checking again at %s.",
+			head, arrival.Format("15:04 on 2 Jan"), next.Format("15:04 on 2 Jan"))
+	}
+	return fmt.Sprintf("%s — expected %s.", head, next.Format("15:04 on 2 Jan"))
 }
 
 // humanInt formats a count with thousands separators, since the numbers

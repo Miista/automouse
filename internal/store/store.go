@@ -125,6 +125,9 @@ type State struct {
 	// "Waiting for enough points to buy anything" rather than an unexplained
 	// gap. Empty means the ordinary configured cadence.
 	NextRunReason string `json:"next_run_reason,omitempty"`
+	// NextRunProjected marks NextRunTime as a points projection rather than
+	// the configured cadence, so balance refreshes know they may revise it.
+	NextRunProjected bool `json:"next_run_projected,omitempty"`
 	// Accrual is the measured points-per-hour rate used to skip runs that
 	// could not possibly afford anything.
 	Accrual Accrual        `json:"accrual"`

@@ -209,8 +209,21 @@ func TestProjectNextUsefulRun(t *testing.T) {
 // user can act on, not a bare timestamp.
 func TestProjectionReasonIsReadable(t *testing.T) {
 	eta := time.Date(2026, 10, 13, 6, 13, 0, 0, time.UTC)
-	got := projectionReason(4088, 35000, 118.9, eta)
+	hours := 30912 / 118.9
+	now := eta.Add(-time.Duration(hours * float64(time.Hour)))
+	got := projectionReason(4088, 35000, 118.9, now, eta)
 	const want = "Waiting for points: 30,912 short of the 35,000 needed for the next purchase, earning about 119/hour — expected 06:13 on 13 Oct."
+	if got != want {
+		t.Errorf("reason = %q\nwant      %q", got, want)
+	}
+}
+
+// TestProjectionReasonWhenCapped pins that a run pulled in by maxSkipAhead
+// is described as an interim check, not as the projected arrival.
+func TestProjectionReasonWhenCapped(t *testing.T) {
+	now := time.Date(2026, 10, 13, 21, 5, 0, 0, time.UTC)
+	got := projectionReason(15544, 26000, 233, now, now.Add(maxSkipAhead))
+	const want = "Waiting for points: 10,456 short of the 26,000 needed for the next purchase, earning about 233/hour — expected 17:57 on 15 Oct; checking again at 21:05 on 14 Oct."
 	if got != want {
 		t.Errorf("reason = %q\nwant      %q", got, want)
 	}
