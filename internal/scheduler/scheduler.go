@@ -175,7 +175,7 @@ func (s *Scheduler) StartSchedule() error {
 		st.SchedulerOn = true
 		st.Paused = false
 		st.NextRunTime = &next
-		st.NextRunReason = ""
+		st.NextRunReason = cadenceReason(settings.Resolve(st.Settings).Settings, st.Accrual.PointsPerHour, delay)
 		st.NextRunProjected = false
 	})
 }
@@ -369,7 +369,8 @@ func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
 		now := time.Now()
 		delay := time.Duration(st.Settings.NextRunDelayMinutes) * time.Minute
 		next := now.Add(delay)
-		reason := ""
+		cfg := settings.Resolve(st.Settings).Settings
+		reason := cadenceReason(cfg, st.Accrual.PointsPerHour, delay)
 		projected := false
 
 		// Skip ahead when the balance cannot reach the cheapest purchase by
@@ -377,7 +378,6 @@ func (s *Scheduler) runAndReschedule(flOnlyOverride bool) {
 		// no-op costing MAM requests to discover nothing. The balance is
 		// re-read on each run, so a projection made optimistic by site
 		// spending simply gets recomputed from the lower balance next time.
-		cfg := settings.Resolve(st.Settings).Settings
 		if threshold, ok := cheapestThreshold(cfg); ok {
 			if balance, have := s.PointsStatus(); have {
 				if eta, ok := projectNextUsefulRun(balance, threshold, st.Accrual.PointsPerHour, now); ok && eta.After(next) {

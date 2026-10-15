@@ -72,6 +72,35 @@ func projectionReason(balance, threshold int, ratePerHour float64, now, next tim
 	return fmt.Sprintf("%s — expected %s.", head, next.Format("15:04 on 2 Jan"))
 }
 
+// cadenceReason explains a run scheduled on the plain configured interval.
+// Without it the dashboard shows a next run an hour out and nothing else,
+// which reads like the scheduler has stalled — most of all on a fresh
+// install, where no earn rate exists yet and every run before the first
+// overnight measurement is a cadence run.
+func cadenceReason(cfg store.Settings, ratePerHour float64, delay time.Duration) string {
+	every := humanInterval(delay)
+	if _, ok := cheapestThreshold(cfg); !ok {
+		return fmt.Sprintf("Checking every %s; no upload or wedge purchases are enabled.", every)
+	}
+	if ratePerHour <= 0 {
+		return fmt.Sprintf("Earn rate not measured yet (sampled overnight, %02d:00–%02d:00); checking every %s until then.",
+			accrualWindowStartHour, accrualWindowEndHour, every)
+	}
+	return fmt.Sprintf("Regular check every %s.", every)
+}
+
+// humanInterval renders a run interval the way it is configured: whole
+// hours as hours, anything else in minutes.
+func humanInterval(d time.Duration) string {
+	if d >= time.Hour && d%time.Hour == 0 {
+		if h := int(d / time.Hour); h > 1 {
+			return fmt.Sprintf("%d hours", h)
+		}
+		return "hour"
+	}
+	return fmt.Sprintf("%d minutes", int(d/time.Minute))
+}
+
 // humanInt formats a count with thousands separators, since the numbers
 // involved run to five and six digits.
 func humanInt(n int) string {
