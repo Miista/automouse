@@ -43,8 +43,8 @@ services:
 docker compose up -d
 ```
 
-Open <http://localhost:8765>, create an admin account, and set your spending
-rules.
+Open <http://localhost:8765>, create a local account (or configure OIDC, see
+below), and set your spending rules.
 
 ## Settings
 
@@ -75,6 +75,16 @@ And a few that aren't settings:
 - `AUTOMOUSE_AUTH_DISABLED=true` — disables the login entirely. Only for
   loopback-bound deployments, or when you're already fronting the app with
   your own auth and don't want a second login.
+- `AUTOMOUSE_OIDC_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET` and `_BASE_URL` —
+  sign in through an OpenID Connect provider (Authelia, Authentik, Keycloak,
+  ...) instead of a local account. All four are required together. Register a
+  confidential client with redirect URI `<BASE_URL>/auth/callback`, scopes
+  `openid profile email`, and `client_secret_basic`; PKCE is always used. Who
+  may sign in is decided at the provider.
+- `AUTOMOUSE_LOCAL_ENABLED=true` — keep the local account next to OIDC as a
+  break-glass login. Off by default when OIDC is configured.
+- `AUTOMOUSE_AUTH_PUBLIC_PATHS` — comma-separated extra paths that skip the
+  login (`/healthz` always does).
 - `LOG_LEVEL` — `debug`, `info`, `warn` or `error` (default `info`).
 
 ## Security
@@ -87,10 +97,14 @@ stored that cookie in plaintext, and had no CSRF protection.
 
 So this one:
 
-- **Requires an admin account before anything is reachable**, created on
-  first launch the way Sonarr and Radarr do it, stored as a bcrypt hash.
-- **Checks your session on every route**, read-only state included. Sessions
-  survive a restart, so updating the image doesn't sign you out.
+- **Requires a sign-in before anything is reachable.** The gate is
+  [authy](https://github.com/miista/authy): your OIDC provider when the
+  `AUTOMOUSE_OIDC_*` variables are set, otherwise a local account created on
+  first launch the way Sonarr and Radarr do it, stored as a bcrypt hash. With
+  OIDC configured, nobody can claim the app by being first.
+- **Checks your session on every route**, read-only state included; API
+  calls without one get `401`. Sessions survive a restart, so updating the
+  image doesn't sign you out.
 - **Rejects cross-origin state changes**, as defense-in-depth alongside the
   login.
 - **Keeps your MAM cookie off disk** when you set `AUTOMOUSE_SETTING_MAM_ID`.

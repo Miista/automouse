@@ -1,9 +1,11 @@
 // Command automouse automates spending MyAnonamouse bonus points (VIP
-// renewal, upload credit, freeleech wedges) on a schedule, behind a
-// first-launch admin login and env-var-overridable settings.
+// renewal, upload credit, freeleech wedges) on a schedule, behind an authy
+// sign-in gate (OIDC, or a first-launch local account) and env-var-overridable
+// settings.
 package main
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"time"
@@ -12,8 +14,8 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/miista/authy"
 	"github.com/miista/automouse/internal/api"
-	"github.com/miista/automouse/internal/auth"
 	"github.com/miista/automouse/internal/scheduler"
 	"github.com/miista/automouse/internal/store"
 )
@@ -35,34 +37,45 @@ func main() {
 		log.Fatal().Err(err).Msg("failed to open state store")
 	}
 
-	authManager, err := auth.NewManager(st)
+	// Sign-in is owned by authy: OIDC when the AUTOMOUSE_OIDC_* variables are
+	// set, otherwise a local account the first visitor creates.
+	// AUTOMOUSE_AUTH_DISABLED=true turns the gate off (gate is nil and Wrap
+	// leaves the handler unchanged). Misconfigured: refuse to start rather
+	// than serve the dashboard unprotected.
+	gate, err := authy.FromEnv(context.Background(), "automouse")
 	if err != nil {
-		log.Fatal().Err(err).Msg("failed to initialize auth")
+		log.Fatal().Err(err).Msg("invalid auth configuration")
+	}
+	if gate == nil {
+		log.Warn().Msg("login is OFF (AUTOMOUSE_AUTH_DISABLED): everyone who can reach this port can spend your points")
 	}
 
 	sched := scheduler.New(st, log)
 	sched.Start()
 
-	server := api.New(st, authManager, sched, log)
-
-	mux := http.NewServeMux()
-	server.Routes(mux)
-	// No build step means no hashed filenames, so a browser must revalidate
-	// app.js/style.css/index.html on every load rather than caching them
-	// blindly — otherwise a deployed update can silently keep serving a
-	// stale dashboard until the user manually clears site data.
-	mux.Handle("/", noCache(http.FileServer(http.Dir(staticDir))))
-
 	log.Info().Str("addr", addr).Str("data_dir", dataDir).Msg("starting automouse")
 
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           newHandler(st, sched, gate, staticDir, log),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	if err := httpServer.ListenAndServe(); err != nil {
 		log.Fatal().Err(err).Msg("server stopped")
 	}
+}
+
+// newHandler is the whole HTTP surface: the API and the dashboard, behind the
+// sign-in gate. A nil gate (AUTOMOUSE_AUTH_DISABLED) leaves it unprotected.
+func newHandler(st *store.Store, sched *scheduler.Scheduler, gate *authy.Gate, staticDir string, log zerolog.Logger) http.Handler {
+	mux := http.NewServeMux()
+	api.New(st, sched, log).Routes(mux)
+	// No build step means no hashed filenames, so a browser must revalidate
+	// app.js/style.css/index.html on every load rather than caching them
+	// blindly — otherwise a deployed update can silently keep serving a
+	// stale dashboard until the user manually clears site data.
+	mux.Handle("/", noCache(http.FileServer(http.Dir(staticDir))))
+	return gate.Wrap(mux)
 }
 
 // noCache forces revalidation on every static asset request instead of

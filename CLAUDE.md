@@ -64,8 +64,9 @@ reason.
 ## Architecture
 
 `main.go` wires four singletons and serves on `:8765`:
-`store.Open(dataDir)` → `auth.NewManager(st)` → `scheduler.New(st, log)` →
-`api.New(st, auth, sched, log)`, with `web/static` served at `/`.
+`store.Open(dataDir)` → `authy.FromEnv(ctx, "automouse")` →
+`scheduler.New(st, log)` → `api.New(st, sched, log)`, with `web/static` served
+at `/`. `newHandler` puts the whole mux behind `gate.Wrap`.
 
 - **`internal/store`** — the single source of truth. The entire application
   document (`State`: admin account, auth HMAC key + live sessions, settings,
@@ -74,10 +75,13 @@ reason.
   All access goes through `View(func(State))` / `Update(func(*State))`,
   which hold the mutex and persist on every update. History is capped at 300
   entries inside `Update`.
-- **`internal/auth`** — first-launch admin setup (Sonarr/Radarr pattern),
-  bcrypt password hash, opaque session IDs signed with an HMAC key. Both key
-  and session set are persisted in `store.Auth` so restarts don't log the
-  user out. `AUTOMOUSE_AUTH_DISABLED=true` bypasses enforcement entirely.
+- **Sign-in is `authy`** (`github.com/miista/authy`, same gate as reaparr and
+  bookshelf), not code in this repo. `AUTOMOUSE_OIDC_*` hands sign-in to the
+  IdP; with none set it falls back to a local first-launch account.
+  `AUTOMOUSE_AUTH_DISABLED=true` bypasses it (nil gate). Its state lives in
+  `/app/data/auth/`, next to `config.json`. `store.Admin` / `store.Auth` are
+  legacy fields kept only so an old `config.json` round-trips and a rollback
+  image still finds its account; nothing reads them.
 - **`internal/settings`** — the `AUTOMOUSE_SETTING_<KEY>` override layer.
   `Resolve(persisted)` returns effective settings plus a `Managed` map of
   key → env var; the API uses that both to render fields read-only and to
@@ -93,10 +97,12 @@ reason.
   (secret.go) wraps the session cookie: its `String()` and `MarshalJSON()`
   always return `"[redacted]"`, so redaction is structural rather than
   regex-based on log output. Keep the cookie inside `Secret` end-to-end.
-- **`internal/api`** — `Routes` is the full surface. Only `/healthz`,
-  `/api/setup` and `/api/login` are unauthenticated; everything else is
-  wrapped in `guarded`, and state-changing POSTs additionally in `csrfGuard`
-  (Origin-header check). Any new route should follow that same wrapping.
+- **`internal/api`** — `Routes` is the full surface. Handlers don't check who
+  is calling: the gate wraps the mux, and only `/healthz` is public. State-
+  changing POSTs are additionally wrapped in `csrfGuard` (Origin-header
+  check). Any new route sits behind the gate automatically and should keep
+  `csrfGuard` if it changes state. `main_test.go` pins that every API route
+  answers 401 without a session.
 - **`web/static`** — no build step. Plain `index.html` / `style.css` /
   `app.js` with a vendored `petite-vue.iife.js`. Edit the files directly.
 

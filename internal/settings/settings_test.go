@@ -127,24 +127,3 @@ func TestMaskSecret(t *testing.T) {
 		}
 	}
 }
-
-func TestAuthDisabled(t *testing.T) {
-	tests := []struct {
-		value string
-		want  bool
-	}{
-		{"true", true},
-		{"1", true},
-		{"false", false},
-		{"0", false},
-		{"nonsense", false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.value, func(t *testing.T) {
-			t.Setenv("AUTOMOUSE_AUTH_DISABLED", tc.value)
-			if got := AuthDisabled(); got != tc.want {
-				t.Errorf("AuthDisabled() with %q = %v, want %v", tc.value, got, tc.want)
-			}
-		})
-	}
-}

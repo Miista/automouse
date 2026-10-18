@@ -136,15 +136,6 @@ func parseInt(v string, fallback int) int {
 	return n
 }
 
-// AuthDisabled reports whether AUTOMOUSE_AUTH_DISABLED is set truthily.
-func AuthDisabled() bool {
-	v, ok := os.LookupEnv("AUTOMOUSE_AUTH_DISABLED")
-	if !ok {
-		return false
-	}
-	return parseBool(v, false)
-}
-
 // MaskSecret returns a masked representation of a secret value, showing
 // only the last 4 characters, e.g. "••••••1234". Empty values are returned
 // empty.
