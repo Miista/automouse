@@ -20,6 +20,7 @@ function App() {
     pollTimer: null,
     runMenuOpen: false,
     schedulerError: '',
+    locale: localStorage.getItem('automouse.locale') || '',
 
     async mounted() {
       // Closes the dry-run dropdown on any click outside the split-button.
@@ -138,11 +139,26 @@ function App() {
       return !!until && new Date(until) > new Date();
     },
 
+    // Empty locale means "follow the browser". The locale drives clock
+    // (12/24h), date order and number separators together.
+    get loc() {
+      return this.locale || undefined;
+    },
+
+    setLocale() {
+      if (this.locale) localStorage.setItem('automouse.locale', this.locale);
+      else localStorage.removeItem('automouse.locale');
+    },
+
+    formatNumber(n) {
+      return (n || 0).toLocaleString(this.loc);
+    },
+
     formatTime(value) {
       if (!value) return '—';
       const d = new Date(value);
       if (isNaN(d.getTime())) return String(value);
-      return d.toLocaleString();
+      return d.toLocaleString(this.loc);
     },
   };
 }

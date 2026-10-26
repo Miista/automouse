@@ -68,7 +68,7 @@
 
         <div class="stat-row">
           <div class="stat-tile">
-            <div class="stat-value">{{ state.have_points ? state.current_points.toLocaleString() : '—' }}</div>
+            <div class="stat-value">{{ state.have_points ? formatNumber(state.current_points) : '—' }}</div>
             <div class="stat-label">Current points</div>
           </div>
         </div>
@@ -77,7 +77,7 @@
           <div class="stat-tile"><div class="stat-value">{{ state.totals.cumulative_upload_gb }}</div><div class="stat-label">GiB upload bought</div></div>
           <div class="stat-tile"><div class="stat-value">{{ state.totals.cumulative_freeleech_wedges }}</div><div class="stat-label">FL wedges bought</div></div>
           <div class="stat-tile"><div class="stat-value">{{ state.totals.cumulative_vip_purchases }}</div><div class="stat-label">VIP renewals</div></div>
-          <div class="stat-tile"><div class="stat-value">{{ state.totals.cumulative_points_spent.toLocaleString() }}</div><div class="stat-label">Points spent</div></div>
+          <div class="stat-tile"><div class="stat-value">{{ formatNumber(state.totals.cumulative_points_spent) }}</div><div class="stat-label">Points spent</div></div>
         </div>
 
         <h2>Run history</h2>
@@ -88,8 +88,8 @@
               <tr v-for="h in state.history" :key="h.started_at">
                 <td class="mono dim">{{ formatTime(h.started_at) }}</td>
                 <td><span v-if="h.dry_run" class="locked-caption" style="margin-right:6px;">DRY RUN</span>{{ h.result }}</td>
-                <td>{{ (h.points_spent || 0).toLocaleString() }}</td>
-                <td>{{ (h.points_after || 0).toLocaleString() }}</td>
+                <td>{{ formatNumber(h.points_spent) }}</td>
+                <td>{{ formatNumber(h.points_after) }}</td>
                 <td>{{ h.upload_gb || 0 }}</td>
                 <td>{{ h.freeleech_wedges || 0 }}</td>
                 <td>{{ h.vip_purchased ? 'Yes' : 'No' }}</td>
@@ -107,6 +107,25 @@
         </p>
 
         <form @submit.prevent="saveSettings" class="settings-form">
+          <fieldset>
+            <legend>Display</legend>
+            <div class="field-row">
+              <label>Date, time and number format</label>
+              <select v-model="locale" @change="setLocale">
+                <option value="">Browser default</option>
+                <option value="da-DK">Dansk (24h, 1.234)</option>
+                <option value="en-GB">English UK (24h, 1,234)</option>
+                <option value="en-US">English US (12h AM/PM, 1,234)</option>
+                <option value="de-DE">Deutsch (24h, 1.234)</option>
+                <option value="sv-SE">Svenska (24h, 1 234)</option>
+                <option value="nb-NO">Norsk (24h, 1 234)</option>
+                <option value="nl-NL">Nederlands (24h, 1.234)</option>
+                <option value="fr-FR">Français (24h, 1 234)</option>
+              </select>
+              <p class="hint">Saved in this browser only and applied immediately — no need to save settings.</p>
+            </div>
+          </fieldset>
+
           <fieldset>
             <legend>MAM session</legend>
             <div class="field-row" v-if="settings.env_managed.mam_id">
